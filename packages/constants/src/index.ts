@@ -6,7 +6,9 @@ export const PAGINATION_DEFAULTS = {
   maxPageSize: 100,
 } as const;
 
-export const AUTH_COOKIE_NAME = "karate_session";
+/** Web-only httpOnly cookies (never read/written from client JS). */
+export const ACCESS_TOKEN_COOKIE_NAME = "karate_access_token";
+export const REFRESH_TOKEN_COOKIE_NAME = "karate_refresh_token";
 
 export const PASSWORD_MIN_LENGTH = 12;
 

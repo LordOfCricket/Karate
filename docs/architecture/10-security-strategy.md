@@ -4,10 +4,9 @@
 
 - **Password storage**: bcrypt, cost factor 12 (`apps/api/src/modules/auth/auth.service.ts`). Never
   plaintext, never reversible encryption.
-- **Authentication**: short-lived JWT access tokens (15 min default) + longer-lived refresh tokens,
-  both HMAC-signed with separate secrets (`JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET`, each validated
-  ≥32 chars at startup by `@karate/config`). Login failure paths return the same generic message
-  whether the email doesn't exist or the password is wrong, to avoid user enumeration.
+- **Authentication**: short-lived JWT access tokens (15 min default) + opaque, rotating refresh
+  tokens (Phase 3 — see below). Login failure paths return the same generic message whether the
+  email doesn't exist or the password is wrong, to avoid user enumeration.
 - **Authorization is always server-side**: role claims come only from the verified JWT
   (`middleware/auth.ts`), never from a client-supplied header/body field. Organization-scoped actions
   additionally verify DB-backed membership (`requireAcademyAdministrator`) — see
@@ -34,10 +33,38 @@
 - **Safe error responses**: see `09-error-handling-strategy.md` — no stack traces, SQL, or internal
   paths ever reach a client, verified by smoke test.
 
-## Explicitly NOT implemented in Phase 1 (do not assume otherwise)
+## Refresh token lifecycle (Phase 3)
 
-- Refresh-token rotation/revocation (a refresh token is issued but there is no revoke-on-logout or
-  reuse-detection endpoint yet).
+Refresh tokens are opaque, cryptographically random strings (`crypto.randomBytes(40)`), **not JWTs**
+— only their SHA-256 hash is persisted (`RefreshSession.tokenHash`, see
+`packages/database/prisma/schema/sessions.prisma`). This is a deliberate change from the Phase 2 JWT
+refresh token: an opaque token can be looked up and revoked server-side, which rotation and reuse
+detection both require; a stateless JWT cannot be individually invalidated without a separate
+revocation list anyway, so the stateless benefit was never real for this use case.
+
+- **Rotation**: every successful `/auth/refresh` call atomically revokes the presented session
+  (`revokedReason: ROTATED`) and issues a new one in the same rotation family
+  (`apps/api/src/modules/auth/refresh.service.ts`). The claim step is a conditional `updateMany`
+  (`WHERE id = ? AND revokedAt IS NULL`) inside a transaction — Postgres row-level locking makes this
+  safe under concurrent requests for the same token: exactly one succeeds.
+- **Reuse detection**: presenting an already-ROTATED token revokes every session in its family,
+  forcing full re-authentication — the strongest available signal that a token was captured. A short
+  grace period (5s) prevents this from misfiring on a genuine concurrent race (two near-simultaneous
+  requests for the same still-fresh token); only a token that was rotated *before* that window fails
+  by declaring theft. See the `REUSE_GRACE_PERIOD_MS` comment in `refresh.service.ts`.
+- **Revocation on logout**: `/auth/logout` revokes the specific session (`revokedReason: LOGOUT`) and
+  is idempotent — safe to call on an already-revoked or unknown token.
+- **Web storage**: refresh (and access) tokens live only in httpOnly, `SameSite=lax` cookies scoped to
+  the Next.js origin — never returned to client JS, never in localStorage.
+- **Mobile storage**: `expo-secure-store` (Keychain/Keystore-backed) — never AsyncStorage.
+- **Client 401 recovery**: both web (`middleware.ts` for SSR navigation, `lib/client/api-fetch.ts` for
+  future client-side calls) and mobile (`lib/api-client.ts`) share a single in-flight refresh promise
+  across concurrent 401s and retry the original request exactly once; non-idempotent requests are
+  only retried when explicitly marked safe to retry.
+
+## Explicitly NOT implemented (do not assume otherwise)
+
+- Refresh-token revocation on password change / "log out all devices."
 - Email verification enforcement (the column exists; nothing currently requires it before login).
 - Distributed rate limiting (Redis-backed) — required before running more than one API instance.
 - CSRF protection (not yet relevant — Phase 1 has no cookie-based session; revisit if session cookies

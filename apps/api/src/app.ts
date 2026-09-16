@@ -10,6 +10,10 @@ import { errorHandler } from "./middleware/errorHandler";
 import { authRouter } from "./modules/auth/auth.routes";
 import { healthRouter } from "./modules/health/health.routes";
 import { academiesRouter } from "./modules/academies/academies.routes";
+import { tournamentsRouter } from "./modules/tournaments/tournaments.routes";
+import { playersRouter } from "./modules/players/players.routes";
+import { coachesRouter } from "./modules/coaches/coaches.routes";
+import { scorersRouter } from "./modules/scorers/scorers.routes";
 
 export function createApp(env: ServerEnv, logger: Logger): Express {
   const app = express();
@@ -24,6 +28,10 @@ export function createApp(env: ServerEnv, logger: Logger): Express {
   app.use("/health", healthRouter);
   app.use("/api/v1/auth", authRouter);
   app.use("/api/v1/academies", academiesRouter);
+  app.use("/api/v1/tournaments", tournamentsRouter);
+  app.use("/api/v1/players", playersRouter);
+  app.use("/api/v1/coaches", coachesRouter);
+  app.use("/api/v1/scorers", scorersRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

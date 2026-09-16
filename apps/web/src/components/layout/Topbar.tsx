@@ -1,6 +1,7 @@
 import type { UserRole } from "@karate/types";
 import { ROLE_LABELS } from "@/lib/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { SignOutButton } from "./SignOutButton";
 
 export function Topbar({ role, userName }: { role: UserRole; userName: string }) {
   return (
@@ -17,6 +18,7 @@ export function Topbar({ role, userName }: { role: UserRole; userName: string })
         >
           {userName.charAt(0).toUpperCase()}
         </div>
+        <SignOutButton />
       </div>
     </header>
   );

@@ -13,9 +13,12 @@ model KarateStyle {
   isActive    Boolean  @default(true)
   createdAt   DateTime @default(now())
 
-  beltSystems    BeltSystem[]
-  categories     Category[]
-  rankingSystems RankingSystem[]
+  beltSystems       BeltSystem[]
+  categories        Category[]
+  rankingSystems    RankingSystem[]
+  primaryForPlayers PlayerProfile[] @relation("PlayerPrimaryStyle")
+  players           PlayerProfile[] @relation("PlayerStyles")
+  coaches           CoachProfile[]  @relation("CoachStyles")
 
   @@map("karate_styles")
 }

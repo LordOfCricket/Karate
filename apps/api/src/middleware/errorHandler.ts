@@ -1,7 +1,23 @@
 import type { NextFunction, Request, Response } from "express";
-import { ZodError } from "zod";
+import type { ZodIssue } from "zod";
 import { isDomainError } from "@karate/shared";
 import type { ApiErrorResponse } from "@karate/types";
+
+/**
+ * Structural check instead of `instanceof ZodError`. In a pnpm workspace,
+ * `zod` can end up loaded as more than one physical module instance across
+ * packages/build tools (observed under vitest specifically), which makes
+ * `instanceof` unreliable even for the "same" version. Zod error shape
+ * (`name: "ZodError"` + an `issues` array) is stable across instances.
+ */
+function isZodError(err: unknown): err is { name: "ZodError"; issues: ZodIssue[] } {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    (err as { name?: unknown }).name === "ZodError" &&
+    Array.isArray((err as { issues?: unknown }).issues)
+  );
+}
 
 /**
  * The single place API errors are translated into client responses.
@@ -32,7 +48,7 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
     return;
   }
 
-  if (err instanceof ZodError) {
+  if (isZodError(err)) {
     req.log.warn({ issues: err.issues }, "request validation failed");
     const body: ApiErrorResponse = {
       success: false,

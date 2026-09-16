@@ -20,18 +20,20 @@ enum AcademyStatus {
 }
 
 model Academy {
-  id          String        @id @default(uuid()) @db.Uuid
-  name        String
-  slug        String        @unique
-  description String?
-  countryCode String? // ISO 3166-1 alpha-2, keeps room for multi-country support
-  city        String?
-  logoUrl     String?
-  status      AcademyStatus @default(PENDING_VERIFICATION)
-  createdById String        @db.Uuid
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
-  deletedAt   DateTime?
+  id           String        @id @default(uuid()) @db.Uuid
+  name         String
+  slug         String        @unique
+  description  String?
+  countryCode  String? // ISO 3166-1 alpha-2, keeps room for multi-country support
+  city         String?
+  logoUrl      String?
+  contactEmail String?
+  contactPhone String?
+  status       AcademyStatus @default(PENDING_VERIFICATION)
+  createdById  String        @db.Uuid
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  deletedAt    DateTime?
 
   createdBy           User                       @relation("AcademyCreatedBy", fields: [createdById], references: [id])
   administrators      AcademyAdministrator[]
@@ -43,6 +45,7 @@ model Academy {
   academyStats        AcademyStats[]
 
   @@index([status])
+  @@index([name])
   @@map("academies")
 }
 

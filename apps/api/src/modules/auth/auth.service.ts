@@ -1,10 +1,10 @@
 import bcrypt from "bcryptjs";
-import jwt from "jsonwebtoken";
 import { prisma } from "@karate/database";
 import type { LoginRequest, RegisterRequest } from "@karate/validation";
 import type { UserRole } from "@karate/types";
-import { AuthenticationError, ConflictError } from "@karate/shared";
-import { loadServerEnv } from "@karate/config";
+import { AuthenticationError, ConflictError, NotFoundError } from "@karate/shared";
+import { issueAccessToken } from "./access-token.util";
+import { createRefreshSession } from "./refresh.service";
 
 const BCRYPT_SALT_ROUNDS = 12;
 
@@ -17,15 +17,12 @@ interface AuthResult {
   refreshToken: string;
 }
 
-function issueTokens(userId: string, roles: UserRole[]) {
-  const env = loadServerEnv();
-  const accessToken = jwt.sign({ sub: userId, roles }, env.JWT_ACCESS_SECRET, {
-    expiresIn: env.JWT_ACCESS_TTL_SECONDS,
-  });
-  const refreshToken = jwt.sign({ sub: userId, roles, type: "refresh" }, env.JWT_REFRESH_SECRET, {
-    expiresIn: env.JWT_REFRESH_TTL_SECONDS,
-  });
-  return { accessToken, refreshToken };
+export interface CurrentUser {
+  userId: string;
+  email: string;
+  fullName: string;
+  roles: UserRole[];
+  status: string;
 }
 
 export async function register(input: RegisterRequest): Promise<AuthResult> {
@@ -47,9 +44,25 @@ export async function register(input: RegisterRequest): Promise<AuthResult> {
   });
 
   const roles = user.roles.map((r) => r.role) as UserRole[];
-  const tokens = issueTokens(user.id, roles);
+  const accessToken = issueAccessToken(user.id, roles);
+  const refreshToken = await createRefreshSession(prisma, user.id);
 
-  return { userId: user.id, email: user.email, fullName: user.fullName, roles, ...tokens };
+  return { userId: user.id, email: user.email, fullName: user.fullName, roles, accessToken, refreshToken };
+}
+
+export async function getCurrentUser(userId: string): Promise<CurrentUser> {
+  const user = await prisma.user.findUnique({ where: { id: userId }, include: { roles: true } });
+  if (!user) {
+    throw new NotFoundError("User", userId);
+  }
+
+  return {
+    userId: user.id,
+    email: user.email,
+    fullName: user.fullName,
+    roles: user.roles.map((r) => r.role) as UserRole[],
+    status: user.status,
+  };
 }
 
 export async function login(input: LoginRequest): Promise<AuthResult> {
@@ -72,7 +85,8 @@ export async function login(input: LoginRequest): Promise<AuthResult> {
   await prisma.user.update({ where: { id: user.id }, data: { lastLoginAt: new Date() } });
 
   const roles = user.roles.map((r) => r.role) as UserRole[];
-  const tokens = issueTokens(user.id, roles);
+  const accessToken = issueAccessToken(user.id, roles);
+  const refreshToken = await createRefreshSession(prisma, user.id);
 
-  return { userId: user.id, email: user.email, fullName: user.fullName, roles, ...tokens };
+  return { userId: user.id, email: user.email, fullName: user.fullName, roles, accessToken, refreshToken };
 }

@@ -20,3 +20,15 @@ export const loginRequestSchema = z.object({
   password: z.string().min(1).max(128),
 });
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
+
+/** Opaque refresh token (see packages/database/prisma/schema/sessions.prisma) — not a JWT, so no JWT-shape check. */
+export const refreshRequestSchema = z.object({
+  refreshToken: z.string().min(20).max(512),
+});
+export type RefreshRequest = z.infer<typeof refreshRequestSchema>;
+
+/** Deliberately lenient: logout must succeed even for a garbage/already-used token (idempotent no-op). */
+export const logoutRequestSchema = z.object({
+  refreshToken: z.string().min(1).max(512),
+});
+export type LogoutRequest = z.infer<typeof logoutRequestSchema>;

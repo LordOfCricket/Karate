@@ -8,17 +8,22 @@ enum Gender {
 }
 
 model PlayerProfile {
-  id             String    @id @default(uuid()) @db.Uuid
-  userId         String    @unique @db.Uuid
+  id             String        @id @default(uuid()) @db.Uuid
+  userId         String        @unique @db.Uuid
+  displayName    String
   dateOfBirth    DateTime
   gender         Gender
-  primaryStyleId String?   @db.Uuid
+  photoUrl       String?
+  primaryStyleId String?       @db.Uuid
   bio            String?
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  status         ProfileStatus @default(ACTIVE)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
 
   user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryStyle       KarateStyle?               @relation("PlayerPrimaryStyle", fields: [primaryStyleId], references: [id], onDelete: SetNull)
+  styles             KarateStyle[]              @relation("PlayerStyles")
   academyMemberships AcademyPlayerMembership[]
   beltHistory        PlayerBeltHistory[]
   registrations      Registration[]

@@ -11,12 +11,15 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@karate/constants": "workspace:*",
     "@karate/types": "workspace:*",
     "@karate/validation": "workspace:*",
     "clsx": "^2.1.1",
+    "jose": "^5.9.6",
     "next": "^14.2.13",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/node": "^20.16.5",

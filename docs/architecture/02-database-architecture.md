@@ -8,6 +8,7 @@ schema" — see [ADR-0003](../decisions/0003-prisma-schema-folder.md).
 | File                                                   | Domain                                                                                          |
 | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
 | `identity.prisma`                                      | `User`, `UserRoleAssignment`                                                                    |
+| `sessions.prisma`                                      | `RefreshSession` (opaque, hashed, rotating refresh tokens — see security strategy doc)          |
 | `academies.prisma`                                     | `Academy`, `AcademyAdministrator`                                                               |
 | `styles.prisma`                                        | `KarateStyle`                                                                                   |
 | `belts.prisma`                                         | `BeltSystem`, `BeltGrade`, `GradingEvent`, `PlayerBeltHistory`, `Certificate`                   |

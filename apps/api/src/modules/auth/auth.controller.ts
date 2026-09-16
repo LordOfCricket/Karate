@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import type { ApiSuccessResponse } from "@karate/types";
 import { asyncHandler } from "../../errors/asyncHandler";
 import * as authService from "./auth.service";
+import * as refreshService from "./refresh.service";
 
 export const registerHandler = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
@@ -18,6 +19,37 @@ export const loginHandler = asyncHandler(async (req: Request, res: Response) => 
   const body: ApiSuccessResponse<typeof result> = {
     success: true,
     data: result,
+    meta: { requestId: req.requestId, timestamp: new Date().toISOString() },
+  };
+  res.status(200).json(body);
+});
+
+export const meHandler = asyncHandler(async (req: Request, res: Response) => {
+  const result = await authService.getCurrentUser(req.user!.id);
+  const body: ApiSuccessResponse<typeof result> = {
+    success: true,
+    data: result,
+    meta: { requestId: req.requestId, timestamp: new Date().toISOString() },
+  };
+  res.status(200).json(body);
+});
+
+export const refreshHandler = asyncHandler(async (req: Request, res: Response) => {
+  const result = await refreshService.refreshTokens(req.body.refreshToken, req.log);
+  const body: ApiSuccessResponse<typeof result> = {
+    success: true,
+    data: result,
+    meta: { requestId: req.requestId, timestamp: new Date().toISOString() },
+  };
+  res.status(200).json(body);
+});
+
+export const logoutHandler = asyncHandler(async (req: Request, res: Response) => {
+  await refreshService.logoutSession(req.body.refreshToken);
+  req.log.info("refresh session revoked (logout)");
+  const body: ApiSuccessResponse<{ loggedOut: true }> = {
+    success: true,
+    data: { loggedOut: true },
     meta: { requestId: req.requestId, timestamp: new Date().toISOString() },
   };
   res.status(200).json(body);

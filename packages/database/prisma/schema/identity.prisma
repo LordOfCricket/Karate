@@ -27,6 +27,14 @@ enum UserStatus {
   DEACTIVATED
 }
 
+/// Shared by PlayerProfile/CoachProfile/ScorerProfile — a lighter-weight
+/// on/off switch distinct from UserStatus (the account) or AcademyStatus
+/// (the organization).
+enum ProfileStatus {
+  ACTIVE
+  INACTIVE
+}
+
 model User {
   id                  String     @id @default(uuid()) @db.Uuid
   /// External SportsHub identity reference. Null until SportsHub integration lands.
@@ -53,6 +61,7 @@ model User {
   raisedProtests    Protest[]              @relation("ProtestRaisedBy")
   resolvedProtests  Protest[]              @relation("ProtestResolvedBy")
   reportedIncidents Incident[]
+  refreshSessions   RefreshSession[]
 
   @@index([status])
   @@map("users")

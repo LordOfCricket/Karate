@@ -8,15 +8,19 @@
 // ============================================================================
 
 model CoachProfile {
-  id          String    @id @default(uuid()) @db.Uuid
-  userId      String    @unique @db.Uuid
+  id          String        @id @default(uuid()) @db.Uuid
+  userId      String        @unique @db.Uuid
+  displayName String
+  photoUrl    String?
   bio         String?
   yearsActive Int?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  status      ProfileStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
   deletedAt   DateTime?
 
   user                User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  styles              KarateStyle[]              @relation("CoachStyles")
   academyAffiliations AcademyCoachAffiliation[]
   stats               CoachStats[]
   membershipRequests  AcademyMembershipRequest[] @relation("MembershipRequestCoach")

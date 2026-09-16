@@ -74,10 +74,23 @@ async function main() {
     },
   });
 
-  await prisma.tournamentOrganizer.upsert({
+  const organizer = await prisma.tournamentOrganizer.upsert({
     where: { academyId: academy.id },
     update: {},
     create: { organizerType: "ACADEMY", academyId: academy.id },
+  });
+
+  await prisma.tournament.upsert({
+    where: { slug: "seed-spring-open-2026" },
+    update: {},
+    create: {
+      organizerId: organizer.id,
+      name: "[SEED] Spring Regional Open",
+      slug: "seed-spring-open-2026",
+      description: "Fictional tournament created by the database seed script.",
+      status: "DRAFT",
+      createdByUserId: academyOwnerUser.id,
+    },
   });
 
   const coachUser = await prisma.user.upsert({

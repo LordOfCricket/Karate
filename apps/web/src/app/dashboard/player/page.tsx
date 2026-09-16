@@ -2,16 +2,29 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { StatTile } from "@/components/ui/StatTile";
 import { demoPlayerOverview } from "@/lib/mock-data";
+import { getCurrentUserOrRedirect } from "@/lib/server/current-user";
 
-export default function PlayerOverviewPage() {
+export default async function PlayerOverviewPage() {
+  const user = await getCurrentUserOrRedirect("/dashboard/player");
   const data = demoPlayerOverview;
 
   return (
     <div className="flex flex-col gap-6">
+      <Card>
+        <CardHeader>
+          <CardTitle>Signed in as</CardTitle>
+          <Badge tone="success">Live account data</Badge>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-1 text-sm">
+          <p className="font-medium text-text-primary">{user.fullName}</p>
+          <p className="text-text-secondary">{user.email}</p>
+        </CardContent>
+      </Card>
+
       <Card className="border-accent/30">
         <CardHeader>
           <CardTitle>Upcoming bout</CardTitle>
-          <Badge tone="warning">Today</Badge>
+          <Badge tone="neutral">Demo data</Badge>
         </CardHeader>
         <CardContent className="flex flex-col gap-1 text-sm">
           <p className="font-medium text-text-primary">{data.upcomingBout.tournament}</p>
