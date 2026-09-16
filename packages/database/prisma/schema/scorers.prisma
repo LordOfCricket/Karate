@@ -1,0 +1,23 @@
+// ============================================================================
+// SCORER DOMAIN
+// ----------------------------------------------------------------------------
+// SCORER is the application role. It carries no fixed competition function —
+// that is assigned per tournament/tatami via OfficialAssignment
+// (officials.prisma). Do not add a `function` column here.
+// ============================================================================
+
+model ScorerProfile {
+  id                 String    @id @default(uuid()) @db.Uuid
+  userId             String    @unique @db.Uuid
+  certificationLevel String?
+  certifiedById      String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+  deletedAt          DateTime?
+
+  user        User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments OfficialAssignment[]
+
+  @@index([userId])
+  @@map("scorer_profiles")
+}

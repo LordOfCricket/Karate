@@ -1,0 +1,90 @@
+// ============================================================================
+// REGISTRATION / ELIGIBILITY / MEDICAL / WEIGH-IN DOMAIN
+// ----------------------------------------------------------------------------
+// Each concern is its own 1:1 table off Registration rather than columns
+// bolted onto one row. This keeps sensitive medical data isolated (its own
+// table, minimal fields, easy to apply stricter access control/retention
+// policy later) and keeps the eligibility/weigh-in workflows independently
+// auditable.
+// ============================================================================
+
+enum RegistrationStatus {
+  SUBMITTED
+  VERIFIED
+  REJECTED
+  WITHDRAWN
+  CONFIRMED
+}
+
+enum MedicalClearanceStatus {
+  PENDING
+  CLEARED
+  DENIED
+  EXPIRED
+}
+
+model Registration {
+  id                    String             @id @default(uuid()) @db.Uuid
+  competitionId         String             @db.Uuid
+  playerId              String             @db.Uuid
+  representingAcademyId String?            @db.Uuid
+  status                RegistrationStatus @default(SUBMITTED)
+  submittedByUserId     String             @db.Uuid
+  submittedAt           DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+
+  competition      Competition       @relation(fields: [competitionId], references: [id], onDelete: Cascade)
+  player           PlayerProfile     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  eligibilityCheck EligibilityCheck?
+  medicalClearance MedicalClearance?
+  weighIn          WeighIn?
+
+  @@unique([competitionId, playerId])
+  @@index([status])
+  @@map("registrations")
+}
+
+model EligibilityCheck {
+  id              String    @id @default(uuid()) @db.Uuid
+  registrationId  String    @unique @db.Uuid
+  isEligible      Boolean?
+  reasonCodes     String[]
+  checkedByUserId String?   @db.Uuid
+  checkedAt       DateTime?
+  notes           String?
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("eligibility_checks")
+}
+
+/// Deliberately minimal: a clearance status + document reference, never raw
+/// medical detail. PII/medical-data minimization is a hard requirement.
+model MedicalClearance {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  registrationId       String                 @unique @db.Uuid
+  status               MedicalClearanceStatus @default(PENDING)
+  clearanceDocumentUrl String?
+  issuedByName         String?
+  issuedAt             DateTime?
+  expiresAt            DateTime?
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("medical_clearances")
+}
+
+model WeighIn {
+  id               String    @id @default(uuid()) @db.Uuid
+  registrationId   String    @unique @db.Uuid
+  scheduledAt      DateTime?
+  weighedAt        DateTime?
+  recordedWeightKg Decimal?  @db.Decimal(5, 2)
+  withinLimit      Boolean?
+  recordedByUserId String?   @db.Uuid
+  notes            String?
+
+  registration Registration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@map("weigh_ins")
+}

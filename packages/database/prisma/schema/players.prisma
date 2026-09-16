@@ -1,0 +1,35 @@
+// ============================================================================
+// PLAYER DOMAIN
+// ============================================================================
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+model PlayerProfile {
+  id             String    @id @default(uuid()) @db.Uuid
+  userId         String    @unique @db.Uuid
+  dateOfBirth    DateTime
+  gender         Gender
+  primaryStyleId String?   @db.Uuid
+  bio            String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+  deletedAt      DateTime?
+
+  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  academyMemberships AcademyPlayerMembership[]
+  beltHistory        PlayerBeltHistory[]
+  registrations      Registration[]
+  redBouts           Bout[]                     @relation("BoutRedPlayer")
+  blueBouts          Bout[]                     @relation("BoutBluePlayer")
+  boutResultsWon     BoutResult[]               @relation("BoutWinner")
+  stats              PlayerStats[]
+  rankingEntries     RankingEntry[]
+  rankingEvents      RankingPointsEvent[]
+  membershipRequests AcademyMembershipRequest[] @relation("MembershipRequestPlayer")
+
+  @@index([userId])
+  @@map("player_profiles")
+}

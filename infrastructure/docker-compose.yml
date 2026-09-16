@@ -1,0 +1,31 @@
+name: karate-platform
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: karate
+      POSTGRES_PASSWORD: karate_dev_password
+      POSTGRES_DB: karate_dev
+    ports:
+      - "5433:5432"
+    volumes:
+      - karate_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U karate -d karate_dev"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - karate_redis_data:/data
+
+volumes:
+  karate_postgres_data:
+  karate_redis_data:

@@ -1,0 +1,98 @@
+// ============================================================================
+// SCORING DOMAIN
+// ----------------------------------------------------------------------------
+// Phase 1 does NOT implement the scoring engine. This lays the contract:
+// - RuleSet/RuleSetVersion make competition rules versioned and traceable to
+//   an official source, so historical bouts stay reproducible even after
+//   rules change (see docs/architecture/competition-architecture.md).
+// - ScoreEvent is one append-only, idempotent event per judge action.
+//   `clientOperationId` is the offline/reconnect idempotency key (section 33
+//   of the product spec): a scorer device can safely retry a submission
+//   after a dropped connection without double-scoring.
+// - Kumite and Kata do NOT share a scoring algorithm; `eventType` is
+//   discipline-specific and interpreted by discipline-specific domain
+//   services in apps/api, not by the database.
+// ============================================================================
+
+model RuleSet {
+  id               String     @id @default(uuid()) @db.Uuid
+  name             String // e.g. "WKF Kumite Rules"
+  discipline       Discipline
+  organizationName String // e.g. "WKF"
+  description      String?
+
+  versions RuleSetVersion[]
+
+  @@unique([name, discipline])
+  @@map("rule_sets")
+}
+
+/// Every version records its official source so scoring behavior is never
+/// "whatever the code happened to do" — it traces back to a dated rule
+/// document. Populate `sourceUrl`/`sourceDate` from the actual WKF (or other
+/// federation) publication before wiring real scoring logic to a version.
+model RuleSetVersion {
+  id            String    @id @default(uuid()) @db.Uuid
+  ruleSetId     String    @db.Uuid
+  version       String // e.g. "2023.1"
+  effectiveFrom DateTime
+  sourceUrl     String?
+  sourceDate    DateTime?
+  changeNotes   String?
+  createdAt     DateTime  @default(now())
+
+  ruleSet      RuleSet       @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
+  competitions Competition[]
+
+  @@unique([ruleSetId, version])
+  @@map("rule_set_versions")
+}
+
+enum BoutResultMethod {
+  POINTS
+  IPPON
+  DECISION
+  DISQUALIFICATION
+  WITHDRAWAL
+  WALKOVER
+  DRAW
+}
+
+/// One row per judge/referee action. Never updated after insert; corrections
+/// are new events (e.g. a penalty reversal), preserving a full audit trail.
+model ScoreEvent {
+  id                   String     @id @default(uuid()) @db.Uuid
+  boutId               String     @db.Uuid
+  discipline           Discipline
+  eventType            String // discipline-specific: e.g. "YUKO" | "WAZA_ARI" | "IPPON" | "PENALTY_CHUI" (kumite); "JUDGE_SCORE" (kata)
+  targetPlayerId       String?    @db.Uuid
+  officialAssignmentId String?    @db.Uuid
+  points               Decimal?   @db.Decimal(6, 2)
+  /// Idempotency key supplied by the scoring client; retries with the same
+  /// key must not create a duplicate event.
+  clientOperationId    String?    @unique
+  recordedAt           DateTime   @default(now())
+
+  bout               Bout                @relation(fields: [boutId], references: [id], onDelete: Cascade)
+  officialAssignment OfficialAssignment? @relation(fields: [officialAssignmentId], references: [id], onDelete: SetNull)
+
+  @@index([boutId, recordedAt])
+  @@map("score_events")
+}
+
+model BoutResult {
+  id                String           @id @default(uuid()) @db.Uuid
+  boutId            String           @unique @db.Uuid
+  winnerPlayerId    String?          @db.Uuid
+  method            BoutResultMethod
+  finalScoreRed     Int?
+  finalScoreBlue    Int?
+  isFinal           Boolean          @default(false)
+  confirmedByUserId String?          @db.Uuid
+  decidedAt         DateTime         @default(now())
+
+  bout   Bout           @relation(fields: [boutId], references: [id], onDelete: Cascade)
+  winner PlayerProfile? @relation("BoutWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
+
+  @@map("bout_results")
+}
