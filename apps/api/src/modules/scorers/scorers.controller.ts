@@ -3,7 +3,9 @@ import { asyncHandler } from "../../errors/asyncHandler";
 import * as scorersService from "./scorers.service";
 
 function respond(res: Response, req: Request, status: number, data: unknown) {
-  res.status(status).json({ success: true, data, meta: { requestId: req.requestId, timestamp: new Date().toISOString() } });
+  res
+    .status(status)
+    .json({ success: true, data, meta: { requestId: req.requestId, timestamp: new Date().toISOString() } });
 }
 
 export const createScorerProfileHandler = asyncHandler(async (req: Request, res: Response) => {

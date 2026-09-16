@@ -3,7 +3,9 @@ import { asyncHandler } from "../../errors/asyncHandler";
 import * as playersService from "./players.service";
 
 function respond(res: Response, req: Request, status: number, data: unknown) {
-  res.status(status).json({ success: true, data, meta: { requestId: req.requestId, timestamp: new Date().toISOString() } });
+  res
+    .status(status)
+    .json({ success: true, data, meta: { requestId: req.requestId, timestamp: new Date().toISOString() } });
 }
 
 export const createPlayerProfileHandler = asyncHandler(async (req: Request, res: Response) => {
@@ -27,4 +29,8 @@ export const listMyMembershipsHandler = asyncHandler(async (req: Request, res: R
 
 export const listMyPendingRequestsHandler = asyncHandler(async (req: Request, res: Response) => {
   respond(res, req, 200, await playersService.listMyPendingRequests(req.user!.id));
+});
+
+export const getMyBeltHistoryHandler = asyncHandler(async (req: Request, res: Response) => {
+  respond(res, req, 200, await playersService.getMyBeltHistory(req.user!.id));
 });

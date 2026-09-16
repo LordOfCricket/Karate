@@ -21,19 +21,20 @@ model PlayerProfile {
   updatedAt      DateTime      @updatedAt
   deletedAt      DateTime?
 
-  user               User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  primaryStyle       KarateStyle?               @relation("PlayerPrimaryStyle", fields: [primaryStyleId], references: [id], onDelete: SetNull)
-  styles             KarateStyle[]              @relation("PlayerStyles")
-  academyMemberships AcademyPlayerMembership[]
-  beltHistory        PlayerBeltHistory[]
-  registrations      Registration[]
-  redBouts           Bout[]                     @relation("BoutRedPlayer")
-  blueBouts          Bout[]                     @relation("BoutBluePlayer")
-  boutResultsWon     BoutResult[]               @relation("BoutWinner")
-  stats              PlayerStats[]
-  rankingEntries     RankingEntry[]
-  rankingEvents      RankingPointsEvent[]
-  membershipRequests AcademyMembershipRequest[] @relation("MembershipRequestPlayer")
+  user                  User                       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  primaryStyle          KarateStyle?               @relation("PlayerPrimaryStyle", fields: [primaryStyleId], references: [id], onDelete: SetNull)
+  styles                KarateStyle[]              @relation("PlayerStyles")
+  academyMemberships    AcademyPlayerMembership[]
+  beltHistory           PlayerBeltHistory[]
+  registrations         Registration[]
+  redBouts              Bout[]                     @relation("BoutRedPlayer")
+  blueBouts             Bout[]                     @relation("BoutBluePlayer")
+  boutResultsWon        BoutResult[]               @relation("BoutWinner")
+  stats                 PlayerStats[]
+  rankingEntries        RankingEntry[]
+  rankingEvents         RankingPointsEvent[]
+  membershipRequests    AcademyMembershipRequest[] @relation("MembershipRequestPlayer")
+  gradingParticipations GradingParticipant[]
 
   @@index([userId])
   @@map("player_profiles")

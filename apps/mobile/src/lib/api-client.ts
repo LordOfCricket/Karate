@@ -105,6 +105,152 @@ async function request<T>(path: string, init: RequestOptions = {}): Promise<T> {
   return payload.data;
 }
 
+/** Returns null on any failure (typically 404 "no profile yet") instead of throwing — a normal, renderable screen state. */
+async function requestOrNull<T>(path: string, init: RequestOptions = {}): Promise<T | null> {
+  try {
+    return await request<T>(path, init);
+  } catch {
+    return null;
+  }
+}
+
+export interface KarateStyleRef {
+  id: string;
+  name: string;
+}
+export interface PlayerProfile {
+  id: string;
+  displayName: string;
+  status: string;
+  primaryStyle: KarateStyleRef | null;
+}
+export interface CoachProfile {
+  id: string;
+  displayName: string;
+  status: string;
+  yearsActive: number | null;
+}
+export interface ScorerProfile {
+  id: string;
+  displayName: string;
+  status: string;
+  verificationStatus: string;
+  certificationLevel: string | null;
+}
+export interface AcademySummary {
+  id: string;
+  name: string;
+  slug: string;
+  logoUrl: string | null;
+}
+export interface MembershipRow {
+  id: string;
+  status: string;
+  academy: AcademySummary;
+  startedAt: string | null;
+}
+export interface PendingRequestRow {
+  id: string;
+  academy: { id: string; name: string; slug: string };
+  createdAt: string;
+}
+export interface IncomingRequestRow {
+  id: string;
+  targetType: "PLAYER" | "COACH";
+  createdAt: string;
+  applicant: { id: string; displayName: string } | null;
+}
+export interface AcademyDetail extends AcademySummary {
+  status: string;
+  playerCount: number;
+  coachCount: number;
+}
+export interface MyAcademy extends AcademySummary {
+  status: string;
+  adminRole: string;
+}
+
+export interface BeltGradeRef {
+  id: string;
+  name: string;
+  type: string;
+  rankOrder: number;
+}
+export interface BeltHistoryEntry {
+  id: string;
+  beltGrade: BeltGradeRef;
+  verificationStatus: string;
+  awardedDate: string;
+  isCurrent: boolean;
+}
+export interface BeltHistoryResponse {
+  current: BeltHistoryEntry | null;
+  history: BeltHistoryEntry[];
+}
+export interface StudentGrade {
+  playerId: string;
+  displayName: string;
+  currentGrade: { name: string; verificationStatus: string } | null;
+}
+export interface GradingEventRow {
+  id: string;
+  name: string;
+  status: string;
+  eventDate: string;
+}
+
+export interface TournamentSummary {
+  id: string;
+  name: string;
+  slug: string;
+  venue: string | null;
+  countryCode: string | null;
+  status: string;
+  registrationOpensAt: string | null;
+  registrationClosesAt: string | null;
+  startDate: string | null;
+  endDate: string | null;
+}
+export interface CategoryRef {
+  id: string;
+  name: string;
+  genderRestriction: string;
+  ageMin: number | null;
+  ageMax: number | null;
+  weightMinKg: string | null;
+  weightMaxKg: string | null;
+}
+export interface CompetitionRef {
+  id: string;
+  discipline: string;
+  name: string;
+  category: CategoryRef;
+}
+export interface TournamentDetail extends TournamentSummary {
+  description: string | null;
+  competitions: CompetitionRef[];
+}
+export interface RegistrationRow {
+  id: string;
+  status: string;
+  submittedAt: string;
+  updatedAt: string;
+  player: { id: string; displayName: string };
+  representingAcademy: { id: string; name: string; slug: string } | null;
+  beltGradeAtRegistration: { id: string; name: string; type: string; rankOrder: number } | null;
+  eligibility: { status: string; reasonCodes: string[] };
+  medical: { status: string; expiresAt: string | null; isValid: boolean };
+  weighIn: { status: string; measuredWeightKg: number | null; measuredAt: string | null };
+  readiness: { status: "READY" | "NOT_READY"; blockedBy: string[] };
+  competition: {
+    id: string;
+    discipline: string;
+    name: string;
+    tournament: { id: string; name: string; slug: string; status: string };
+    category: CategoryRef;
+  };
+}
+
 /** Same backend contracts as web — no auth logic is reimplemented here, only transported. */
 export const apiClient = {
   register: (input: RegisterRequest) =>
@@ -114,4 +260,91 @@ export const apiClient = {
   me: () => request<CurrentUser>("/api/v1/auth/me", { withAuth: true }),
   logout: (refreshToken: string) =>
     request<{ loggedOut: true }>("/api/v1/auth/logout", { method: "POST", body: { refreshToken } }),
+
+  getPlayerProfile: () => requestOrNull<PlayerProfile>("/api/v1/players/me", { withAuth: true }),
+  createPlayerProfile: (input: { displayName: string; dateOfBirth: string; gender: "MALE" | "FEMALE" }) =>
+    request<PlayerProfile>("/api/v1/players/profile", { method: "POST", body: input, withAuth: true }),
+  getPlayerMemberships: () =>
+    request<MembershipRow[]>("/api/v1/players/me/memberships", { withAuth: true }).catch(() => []),
+  getPlayerPendingRequests: () =>
+    request<PendingRequestRow[]>("/api/v1/players/me/requests", { withAuth: true }).catch(() => []),
+
+  getCoachProfile: () => requestOrNull<CoachProfile>("/api/v1/coaches/me", { withAuth: true }),
+  createCoachProfile: (input: { displayName: string }) =>
+    request<CoachProfile>("/api/v1/coaches/profile", { method: "POST", body: input, withAuth: true }),
+  getCoachAffiliations: () =>
+    request<MembershipRow[]>("/api/v1/coaches/me/affiliations", { withAuth: true }).catch(() => []),
+  getCoachPendingRequests: () =>
+    request<PendingRequestRow[]>("/api/v1/coaches/me/requests", { withAuth: true }).catch(() => []),
+
+  getScorerProfile: () => requestOrNull<ScorerProfile>("/api/v1/scorers/me", { withAuth: true }),
+  createScorerProfile: (input: { displayName: string }) =>
+    request<ScorerProfile>("/api/v1/scorers/profile", { method: "POST", body: input, withAuth: true }),
+
+  getMyAcademies: () => request<MyAcademy[]>("/api/v1/academies/mine", { withAuth: true }).catch(() => []),
+  getAcademyPendingRequests: (academyId: string) =>
+    request<IncomingRequestRow[]>(`/api/v1/academies/${academyId}/membership-requests`, {
+      withAuth: true,
+    }).catch(() => []),
+  getAcademyDetail: (academyId: string) => requestOrNull<AcademyDetail>(`/api/v1/academies/${academyId}`),
+  createAcademy: (input: { name: string }) =>
+    request<AcademySummary>("/api/v1/academies", { method: "POST", body: input, withAuth: true }),
+  searchAcademies: (q: string) =>
+    request<{ items: AcademySummary[] }>(`/api/v1/academies?q=${encodeURIComponent(q)}&pageSize=10`).then(
+      (r) => r.items,
+    ),
+  requestToJoinAcademy: (academyId: string) =>
+    request<{ id: string }>(`/api/v1/academies/${academyId}/membership-requests`, {
+      method: "POST",
+      body: {},
+      withAuth: true,
+    }),
+  resolveMembershipRequest: (academyId: string, requestId: string, action: "ACCEPT" | "REJECT") =>
+    request<{ membership: unknown }>(`/api/v1/academies/${academyId}/membership-requests/resolve`, {
+      method: "POST",
+      body: { requestId, action },
+      withAuth: true,
+    }),
+
+  getMyBeltHistory: () =>
+    requestOrNull<BeltHistoryResponse>("/api/v1/players/me/belt-history", { withAuth: true }),
+  getMyStudentsGrades: () =>
+    request<StudentGrade[]>("/api/v1/coaches/me/students-grades", { withAuth: true }).catch(() => []),
+  getAcademyGradingEvents: (academyId: string) =>
+    request<GradingEventRow[]>(`/api/v1/academies/${academyId}/grading-events`, { withAuth: true }).catch(
+      () => [],
+    ),
+
+  listOpenTournaments: () =>
+    request<{ items: TournamentSummary[] }>("/api/v1/tournaments?status=REGISTRATION_OPEN&pageSize=50")
+      .then((r) => r.items)
+      .catch(() => []),
+  getTournamentDetail: (tournamentId: string) =>
+    requestOrNull<TournamentDetail>(`/api/v1/tournaments/${tournamentId}`),
+  createRegistration: (competitionId: string) =>
+    request<RegistrationRow>("/api/v1/registrations", {
+      method: "POST",
+      body: { competitionId },
+      withAuth: true,
+    }),
+  withdrawRegistration: (registrationId: string) =>
+    request<RegistrationRow>(`/api/v1/registrations/${registrationId}/withdraw`, {
+      method: "POST",
+      withAuth: true,
+    }),
+  reevaluateEligibility: (registrationId: string) =>
+    request<{ status: string; reasonCodes: string[] }>(
+      `/api/v1/registrations/${registrationId}/eligibility/re-evaluate`,
+      { method: "POST", withAuth: true },
+    ),
+  getMyRegistrations: () =>
+    request<RegistrationRow[]>("/api/v1/registrations/me", { withAuth: true }).catch(() => []),
+  getMyStudentsRegistrations: () =>
+    request<RegistrationRow[]>("/api/v1/coaches/me/students-registrations", { withAuth: true }).catch(
+      () => [],
+    ),
+  getAcademyRegistrations: (academyId: string) =>
+    request<RegistrationRow[]>(`/api/v1/academies/${academyId}/registrations`, { withAuth: true }).catch(
+      () => [],
+    ),
 };

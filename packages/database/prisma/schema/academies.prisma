@@ -43,6 +43,7 @@ model Academy {
   tournamentOrganizer TournamentOrganizer?
   gradingEventsHosted GradingEvent[]
   academyStats        AcademyStats[]
+  registrations       Registration[]
 
   @@index([status])
   @@index([name])

@@ -51,7 +51,10 @@ describe("coach profile", () => {
 
   it("blocks duplicate coach profile creation", async () => {
     const coach = await registerAndLogin(app, "COACH");
-    await request(app).post("/api/v1/coaches/profile").set(auth(coach.accessToken)).send({ displayName: "C" });
+    await request(app)
+      .post("/api/v1/coaches/profile")
+      .set(auth(coach.accessToken))
+      .send({ displayName: "C" });
 
     const res = await request(app)
       .post("/api/v1/coaches/profile")
@@ -104,7 +107,10 @@ describe("coach -> academy invitation", () => {
     const owner = await registerAndLogin(app, "ACADEMY");
     const { academy } = await createAcademyWithOrganizer(owner.userId);
     const coach = await registerAndLogin(app, "COACH");
-    await request(app).post("/api/v1/coaches/profile").set(auth(coach.accessToken)).send({ displayName: "C" });
+    await request(app)
+      .post("/api/v1/coaches/profile")
+      .set(auth(coach.accessToken))
+      .send({ displayName: "C" });
 
     const res = await request(app)
       .post(`/api/v1/academies/${academy.id}/membership-requests`)
@@ -120,7 +126,10 @@ describe("coach -> academy invitation", () => {
     const owner = await registerAndLogin(app, "ACADEMY");
     const { academy } = await createAcademyWithOrganizer(owner.userId);
     const coach = await registerAndLogin(app, "COACH");
-    await request(app).post("/api/v1/coaches/profile").set(auth(coach.accessToken)).send({ displayName: "C" });
+    await request(app)
+      .post("/api/v1/coaches/profile")
+      .set(auth(coach.accessToken))
+      .send({ displayName: "C" });
 
     await request(app)
       .post(`/api/v1/academies/${academy.id}/membership-requests`)
@@ -138,7 +147,10 @@ describe("coach -> academy invitation", () => {
     const owner = await registerAndLogin(app, "ACADEMY");
     const { academy } = await createAcademyWithOrganizer(owner.userId);
     const coach = await registerAndLogin(app, "COACH");
-    await request(app).post("/api/v1/coaches/profile").set(auth(coach.accessToken)).send({ displayName: "C" });
+    await request(app)
+      .post("/api/v1/coaches/profile")
+      .set(auth(coach.accessToken))
+      .send({ displayName: "C" });
     const invite = await request(app)
       .post(`/api/v1/academies/${academy.id}/membership-requests`)
       .set(auth(coach.accessToken))
@@ -157,7 +169,10 @@ describe("coach -> academy invitation", () => {
     const owner = await registerAndLogin(app, "ACADEMY");
     const { academy } = await createAcademyWithOrganizer(owner.userId);
     const coach = await registerAndLogin(app, "COACH");
-    await request(app).post("/api/v1/coaches/profile").set(auth(coach.accessToken)).send({ displayName: "C" });
+    await request(app)
+      .post("/api/v1/coaches/profile")
+      .set(auth(coach.accessToken))
+      .send({ displayName: "C" });
     const invite = await request(app)
       .post(`/api/v1/academies/${academy.id}/membership-requests`)
       .set(auth(coach.accessToken))
@@ -179,7 +194,10 @@ describe("coach -> academy invitation", () => {
     const owner = await registerAndLogin(app, "ACADEMY");
     const { academy } = await createAcademyWithOrganizer(owner.userId);
     const coach = await registerAndLogin(app, "COACH");
-    await request(app).post("/api/v1/coaches/profile").set(auth(coach.accessToken)).send({ displayName: "C" });
+    await request(app)
+      .post("/api/v1/coaches/profile")
+      .set(auth(coach.accessToken))
+      .send({ displayName: "C" });
     const invite = await request(app)
       .post(`/api/v1/academies/${academy.id}/membership-requests`)
       .set(auth(coach.accessToken))
@@ -241,12 +259,22 @@ describe("membership lifecycle and history", () => {
       .send({ displayName: "P", dateOfBirth: "2005-01-01", gender: "MALE" });
 
     await prisma.academyPlayerMembership.create({
-      data: { academyId: academy.id, playerId: profileRes.body.data.id, status: "ACTIVE", startedAt: new Date() },
+      data: {
+        academyId: academy.id,
+        playerId: profileRes.body.data.id,
+        status: "ACTIVE",
+        startedAt: new Date(),
+      },
     });
 
     await expect(
       prisma.academyPlayerMembership.create({
-        data: { academyId: academy.id, playerId: profileRes.body.data.id, status: "ACTIVE", startedAt: new Date() },
+        data: {
+          academyId: academy.id,
+          playerId: profileRes.body.data.id,
+          status: "ACTIVE",
+          startedAt: new Date(),
+        },
       }),
     ).rejects.toThrow();
   });
@@ -261,14 +289,21 @@ describe("membership lifecycle and history", () => {
       .send({ displayName: "P", dateOfBirth: "2005-01-01", gender: "MALE" });
 
     const membership = await prisma.academyPlayerMembership.create({
-      data: { academyId: academy.id, playerId: profileRes.body.data.id, status: "ACTIVE", startedAt: new Date() },
+      data: {
+        academyId: academy.id,
+        playerId: profileRes.body.data.id,
+        status: "ACTIVE",
+        startedAt: new Date(),
+      },
     });
     await prisma.academyPlayerMembership.update({
       where: { id: membership.id },
       data: { status: "LEFT", endedAt: new Date() },
     });
 
-    const rows = await prisma.academyPlayerMembership.findMany({ where: { playerId: profileRes.body.data.id } });
+    const rows = await prisma.academyPlayerMembership.findMany({
+      where: { playerId: profileRes.body.data.id },
+    });
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe("LEFT");
   });
@@ -322,14 +357,21 @@ describe("membership lifecycle and history", () => {
       .send({ displayName: "C" });
 
     const affiliation = await prisma.academyCoachAffiliation.create({
-      data: { academyId: academy.id, coachId: profileRes.body.data.id, status: "ACTIVE", startedAt: new Date() },
+      data: {
+        academyId: academy.id,
+        coachId: profileRes.body.data.id,
+        status: "ACTIVE",
+        startedAt: new Date(),
+      },
     });
     await prisma.academyCoachAffiliation.update({
       where: { id: affiliation.id },
       data: { status: "SUSPENDED" },
     });
 
-    const rows = await prisma.academyCoachAffiliation.findMany({ where: { coachId: profileRes.body.data.id } });
+    const rows = await prisma.academyCoachAffiliation.findMany({
+      where: { coachId: profileRes.body.data.id },
+    });
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe("SUSPENDED");
   });

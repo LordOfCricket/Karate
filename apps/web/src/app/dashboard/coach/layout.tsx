@@ -1,10 +1,12 @@
 import type { ReactNode } from "react";
 import { DashboardShell } from "@/components/layout/DashboardShell";
-import { demoCoachOverview } from "@/lib/mock-data";
+import { getCurrentUserOrRedirect } from "@/lib/server/current-user";
 
-export default function CoachLayout({ children }: { children: ReactNode }) {
+export default async function CoachLayout({ children }: { children: ReactNode }) {
+  const user = await getCurrentUserOrRedirect("/dashboard/coach");
+
   return (
-    <DashboardShell role="COACH" userName={demoCoachOverview.name}>
+    <DashboardShell role="COACH" userName={user.fullName}>
       {children}
     </DashboardShell>
   );

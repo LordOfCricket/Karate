@@ -1,11 +1,23 @@
 import { Router } from "express";
-import { tournamentIdParamsSchema, transitionTournamentStatusSchema } from "@karate/validation";
+import {
+  listTournamentsQuerySchema,
+  tournamentIdParamsSchema,
+  transitionTournamentStatusSchema,
+} from "@karate/validation";
 import { authenticate } from "../../middleware/auth";
 import { requireRole } from "../../middleware/rbac";
 import { validate } from "../../middleware/validate";
-import { transitionStatusHandler } from "./tournaments.controller";
+import { listTournamentsHandler, getTournamentDetailHandler, transitionStatusHandler } from "./tournaments.controller";
 
 export const tournamentsRouter = Router();
+
+tournamentsRouter.get("/", validate(listTournamentsQuerySchema, "query"), listTournamentsHandler);
+
+tournamentsRouter.get(
+  "/:tournamentId",
+  validate(tournamentIdParamsSchema, "params"),
+  getTournamentDetailHandler,
+);
 
 tournamentsRouter.patch(
   "/:tournamentId/status",

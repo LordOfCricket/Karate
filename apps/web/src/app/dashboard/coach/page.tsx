@@ -1,41 +1,46 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { StatTile } from "@/components/ui/StatTile";
-import { EmptyState } from "@/components/ui/EmptyState";
-import { demoCoachOverview } from "@/lib/mock-data";
+import {
+  getCoachProfile,
+  getCoachAffiliations,
+  getCoachPendingRequests,
+  getMyStudentsGrades,
+} from "@/lib/server/domain";
+import { CoachProfileForm } from "@/components/domain/CoachProfileForm";
+import { MembershipList } from "@/components/domain/MembershipList";
+import { AcademyFinder } from "@/components/domain/AcademyFinder";
+import { StudentsGradesList } from "@/components/domain/StudentsGradesList";
 
-export default function CoachOverviewPage() {
-  const data = demoCoachOverview;
+export default async function CoachOverviewPage({ searchParams }: { searchParams: { q?: string } }) {
+  const profile = await getCoachProfile();
+  const [affiliations, pendingRequests, students] = profile
+    ? await Promise.all([getCoachAffiliations(), getCoachPendingRequests(), getMyStudentsGrades()])
+    : [[], [], []];
+  const hasAcademyRelationship = affiliations.length > 0 || pendingRequests.length > 0;
+
+  if (!profile) {
+    return <CoachProfileForm />;
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
-        <StatTile label="Students" value={data.stats.studentCount} />
-        <StatTile label="Student wins" value={data.stats.studentWins} />
-        <StatTile label="Student losses" value={data.stats.studentLosses} />
-        <StatTile label="Medals" value={data.stats.medalsWon} />
-      </div>
-
       <Card>
         <CardHeader>
-          <CardTitle>Students competing now</CardTitle>
+          <CardTitle>Coach profile</CardTitle>
+          <Badge tone={profile.status === "ACTIVE" ? "success" : "neutral"}>{profile.status}</Badge>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {data.studentsCompetingNow.length === 0 ? (
-            <EmptyState title="No students competing right now" />
-          ) : (
-            data.studentsCompetingNow.map((student) => (
-              <div key={student.name} className="flex items-center justify-between text-sm">
-                <div>
-                  <p className="font-medium text-text-primary">{student.name}</p>
-                  <p className="text-text-muted">{student.tournament}</p>
-                </div>
-                <Badge tone={student.status === "LIVE" ? "danger" : "neutral"}>{student.status}</Badge>
-              </div>
-            ))
-          )}
+        <CardContent className="flex flex-col gap-1 text-sm">
+          <p className="font-medium text-text-primary">{profile.displayName}</p>
+          <p className="text-text-secondary">
+            {profile.yearsActive ? `${profile.yearsActive} years coaching` : "Experience not set"}
+          </p>
         </CardContent>
       </Card>
+
+      <StudentsGradesList students={students} />
+
+      <MembershipList memberships={affiliations} pendingRequests={pendingRequests} />
+      {!hasAcademyRelationship && <AcademyFinder dashboardPath="/dashboard/coach" query={searchParams.q} />}
     </div>
   );
 }

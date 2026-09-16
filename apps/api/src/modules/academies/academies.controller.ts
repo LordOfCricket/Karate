@@ -39,8 +39,16 @@ export const updateAcademyHandler = asyncHandler(async (req: Request, res: Respo
 });
 
 export const createMembershipRequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const result = await academiesService.createMembershipRequest(requireAcademyId(req), req.user!.id, req.body);
+  const result = await academiesService.createMembershipRequest(
+    requireAcademyId(req),
+    req.user!.id,
+    req.body,
+  );
   respond(res, req, 201, result);
+});
+
+export const listActivePlayersHandler = asyncHandler(async (req: Request, res: Response) => {
+  respond(res, req, 200, await academiesService.listActivePlayers(requireAcademyId(req)));
 });
 
 export const listPendingMembershipRequestsHandler = asyncHandler(async (req: Request, res: Response) => {
@@ -48,6 +56,10 @@ export const listPendingMembershipRequestsHandler = asyncHandler(async (req: Req
 });
 
 export const resolveMembershipRequestHandler = asyncHandler(async (req: Request, res: Response) => {
-  const result = await academiesService.resolveMembershipRequest(requireAcademyId(req), req.user!.id, req.body);
+  const result = await academiesService.resolveMembershipRequest(
+    requireAcademyId(req),
+    req.user!.id,
+    req.body,
+  );
   respond(res, req, 200, result);
 });

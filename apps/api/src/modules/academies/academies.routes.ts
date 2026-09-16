@@ -19,6 +19,7 @@ import {
   createMembershipRequestHandler,
   listPendingMembershipRequestsHandler,
   resolveMembershipRequestHandler,
+  listActivePlayersHandler,
 } from "./academies.controller";
 
 export const academiesRouter = Router();
@@ -53,6 +54,14 @@ academiesRouter.post(
   validate(academyIdParamsSchema, "params"),
   validate(createMembershipRequestSchema),
   createMembershipRequestHandler,
+);
+
+academiesRouter.get(
+  "/:academyId/players",
+  authenticate,
+  validate(academyIdParamsSchema, "params"),
+  requireAcademyAdministrator(),
+  listActivePlayersHandler,
 );
 
 academiesRouter.get(

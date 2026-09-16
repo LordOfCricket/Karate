@@ -75,7 +75,10 @@ export async function searchAcademies(query: AcademySearchQuery) {
 }
 
 export async function getAcademyById(academyId: string) {
-  const academy = await prisma.academy.findUnique({ where: { id: academyId }, select: ACADEMY_SUMMARY_SELECT });
+  const academy = await prisma.academy.findUnique({
+    where: { id: academyId },
+    select: ACADEMY_SUMMARY_SELECT,
+  });
   if (!academy) {
     throw new NotFoundError("Academy", academyId);
   }
@@ -121,7 +124,11 @@ export async function updateAcademy(academyId: string, input: UpdateAcademyReque
  * profile — never from client-supplied ids — so a user can only ever
  * request membership on their own behalf.
  */
-export async function createMembershipRequest(academyId: string, userId: string, input: CreateMembershipRequest) {
+export async function createMembershipRequest(
+  academyId: string,
+  userId: string,
+  input: CreateMembershipRequest,
+) {
   const academy = await prisma.academy.findUnique({ where: { id: academyId } });
   if (!academy) {
     throw new NotFoundError("Academy", academyId);
@@ -133,9 +140,19 @@ export async function createMembershipRequest(academyId: string, userId: string,
   ]);
 
   const target = coachProfile
-    ? { targetType: "COACH" as const, initiatedBy: "COACH" as const, coachId: coachProfile.id, playerId: undefined }
+    ? {
+        targetType: "COACH" as const,
+        initiatedBy: "COACH" as const,
+        coachId: coachProfile.id,
+        playerId: undefined,
+      }
     : playerProfile
-      ? { targetType: "PLAYER" as const, initiatedBy: "PLAYER" as const, playerId: playerProfile.id, coachId: undefined }
+      ? {
+          targetType: "PLAYER" as const,
+          initiatedBy: "PLAYER" as const,
+          playerId: playerProfile.id,
+          coachId: undefined,
+        }
       : null;
 
   if (!target) {
@@ -164,6 +181,15 @@ export async function createMembershipRequest(academyId: string, userId: string,
     }
     throw error;
   }
+}
+
+/** Active player members — used to populate pickers (e.g. grading participants) without exposing raw ids to the client. */
+export async function listActivePlayers(academyId: string) {
+  const memberships = await prisma.academyPlayerMembership.findMany({
+    where: { academyId, status: "ACTIVE" },
+    include: { player: { select: { id: true, displayName: true } } },
+  });
+  return memberships.map((m) => m.player);
 }
 
 /** Pending requests an academy administrator needs to act on. */

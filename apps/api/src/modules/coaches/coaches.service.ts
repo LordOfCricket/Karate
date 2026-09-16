@@ -88,6 +88,61 @@ export async function listMyPendingRequests(userId: string) {
   return requests.map((r) => ({ id: r.id, academy: r.academy, message: r.message, createdAt: r.createdAt }));
 }
 
+/**
+ * "Students" = players who share an ACTIVE academy membership with an
+ * academy this coach is ACTIVELY affiliated with. There is no direct
+ * coach-roster concept in the data model, so this is the closest real
+ * relationship — reused rather than inventing a parallel one.
+ */
+export async function listMyStudentsGrades(userId: string) {
+  const profile = await findByUserId(userId);
+  if (!profile) {
+    throw new NotFoundError("Coach profile");
+  }
+
+  const activeAcademyIds = (
+    await prisma.academyCoachAffiliation.findMany({
+      where: { coachId: profile.id, status: "ACTIVE" },
+      select: { academyId: true },
+    })
+  ).map((a) => a.academyId);
+
+  if (activeAcademyIds.length === 0) {
+    return [];
+  }
+
+  const memberships = await prisma.academyPlayerMembership.findMany({
+    where: { academyId: { in: activeAcademyIds }, status: "ACTIVE" },
+    include: {
+      player: {
+        select: {
+          id: true,
+          displayName: true,
+          beltHistory: { where: { isCurrent: true }, include: { beltGrade: true } },
+        },
+      },
+    },
+  });
+
+  const seen = new Set<string>();
+  return memberships
+    .filter((m) => {
+      if (seen.has(m.player.id)) return false;
+      seen.add(m.player.id);
+      return true;
+    })
+    .map((m) => ({
+      playerId: m.player.id,
+      displayName: m.player.displayName,
+      currentGrade: m.player.beltHistory[0]
+        ? {
+            name: m.player.beltHistory[0].beltGrade.name,
+            verificationStatus: m.player.beltHistory[0].verificationStatus,
+          }
+        : null,
+    }));
+}
+
 export async function updateProfile(userId: string, input: UpdateCoachProfileRequest) {
   const existing = await findByUserId(userId);
   if (!existing) {

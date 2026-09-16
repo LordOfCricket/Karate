@@ -1,6 +1,7 @@
 import { prisma } from "@karate/database";
 import type { CreatePlayerProfileRequest, UpdatePlayerProfileRequest } from "@karate/validation";
 import { ConflictError, NotFoundError } from "@karate/shared";
+import { getBeltHistoryForPlayer } from "../grading/beltHistory.service";
 
 const PROFILE_INCLUDE = { primaryStyle: true, styles: true } as const;
 
@@ -17,7 +18,9 @@ function toDto(profile: PlayerProfileWithRelations) {
     photoUrl: profile.photoUrl,
     bio: profile.bio,
     status: profile.status,
-    primaryStyle: profile.primaryStyle ? { id: profile.primaryStyle.id, name: profile.primaryStyle.name } : null,
+    primaryStyle: profile.primaryStyle
+      ? { id: profile.primaryStyle.id, name: profile.primaryStyle.name }
+      : null,
     styles: profile.styles.map((s) => ({ id: s.id, name: s.name })),
     createdAt: profile.createdAt,
     updatedAt: profile.updatedAt,
@@ -91,6 +94,15 @@ export async function listMyPendingRequests(userId: string) {
     orderBy: { createdAt: "desc" },
   });
   return requests.map((r) => ({ id: r.id, academy: r.academy, message: r.message, createdAt: r.createdAt }));
+}
+
+/** The player's own current grade + full history — reuses the grading domain's read logic, no duplication. */
+export async function getMyBeltHistory(userId: string) {
+  const profile = await findByUserId(userId);
+  if (!profile) {
+    throw new NotFoundError("Player profile");
+  }
+  return getBeltHistoryForPlayer(profile.id);
 }
 
 export async function updateProfile(userId: string, input: UpdatePlayerProfileRequest) {

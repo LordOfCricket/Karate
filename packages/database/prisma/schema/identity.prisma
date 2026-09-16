@@ -50,18 +50,20 @@ model User {
   updatedAt           DateTime   @updatedAt
   deletedAt           DateTime?
 
-  roles             UserRoleAssignment[]
-  playerProfile     PlayerProfile?
-  coachProfile      CoachProfile?
-  scorerProfile     ScorerProfile?
-  createdAcademies  Academy[]              @relation("AcademyCreatedBy")
-  academyAdminOf    AcademyAdministrator[]
-  auditLogs         AuditLog[]
-  notifications     Notification[]
-  raisedProtests    Protest[]              @relation("ProtestRaisedBy")
-  resolvedProtests  Protest[]              @relation("ProtestResolvedBy")
-  reportedIncidents Incident[]
-  refreshSessions   RefreshSession[]
+  roles                     UserRoleAssignment[]
+  playerProfile             PlayerProfile?
+  coachProfile              CoachProfile?
+  scorerProfile             ScorerProfile?
+  createdAcademies          Academy[]              @relation("AcademyCreatedBy")
+  academyAdminOf            AcademyAdministrator[]
+  auditLogs                 AuditLog[]
+  notifications             Notification[]
+  raisedProtests            Protest[]              @relation("ProtestRaisedBy")
+  resolvedProtests          Protest[]              @relation("ProtestResolvedBy")
+  reportedIncidents         Incident[]
+  refreshSessions           RefreshSession[]
+  medicalClearancesVerified MedicalClearance[]
+  weighInAttemptsVerified   WeighInAttempt[]
 
   @@index([status])
   @@map("users")

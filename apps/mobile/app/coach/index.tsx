@@ -1,54 +1,99 @@
-import { ScrollView, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useState } from "react";
+import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
-import { StatTile } from "@/components/StatTile";
-import { EmptyState } from "@/components/EmptyState";
-import { demoCoachOverview } from "@/lib/mock-data";
+import { TextField } from "@/components/TextField";
+import { ProfileFormCard } from "@/components/ProfileFormCard";
+import { MembershipList } from "@/components/MembershipList";
+import { AcademySearchBox } from "@/components/AcademySearchBox";
+import { StudentsGradesList } from "@/components/StudentsGradesList";
+import {
+  apiClient,
+  type CoachProfile,
+  type MembershipRow,
+  type PendingRequestRow,
+  type StudentGrade,
+} from "@/lib/api-client";
 import { colors, spacing, typography } from "@/theme/tokens";
 
 export default function CoachOverviewScreen() {
-  const data = demoCoachOverview;
+  const [loading, setLoading] = useState(true);
+  const [profile, setProfile] = useState<CoachProfile | null>(null);
+  const [affiliations, setAffiliations] = useState<MembershipRow[]>([]);
+  const [pendingRequests, setPendingRequests] = useState<PendingRequestRow[]>([]);
+  const [students, setStudents] = useState<StudentGrade[]>([]);
+  const [displayName, setDisplayName] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const p = await apiClient.getCoachProfile();
+    setProfile(p);
+    if (p) {
+      const [a, r, s] = await Promise.all([
+        apiClient.getCoachAffiliations(),
+        apiClient.getCoachPendingRequests(),
+        apiClient.getMyStudentsGrades(),
+      ]);
+      setAffiliations(a);
+      setPendingRequests(r);
+      setStudents(s);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator color={colors.accent} />
+      </View>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+        <ProfileFormCard
+          title="Complete your coach profile"
+          description="Create your profile before affiliating with an academy."
+          onSubmit={() => apiClient.createCoachProfile({ displayName })}
+          onSuccess={load}
+        >
+          <TextField label="Display name" value={displayName} onChangeText={setDisplayName} />
+        </ProfileFormCard>
+      </ScrollView>
+    );
+  }
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <View style={styles.statsGrid}>
-        <StatTile label="Students" value={data.stats.studentCount} />
-        <StatTile label="Wins" value={data.stats.studentWins} />
-        <StatTile label="Losses" value={data.stats.studentLosses} />
-        <StatTile label="Medals" value={data.stats.medalsWon} />
-      </View>
-
       <Card>
-        <Text style={styles.cardTitle}>Students competing now</Text>
-        {data.studentsCompetingNow.length === 0 ? (
-          <EmptyState title="No students competing right now" />
-        ) : (
-          data.studentsCompetingNow.map((student) => (
-            <View key={student.name} style={styles.studentRow}>
-              <View>
-                <Text style={styles.bold}>{student.name}</Text>
-                <Text style={styles.muted}>{student.tournament}</Text>
-              </View>
-              <Badge label={student.status} tone={student.status === "LIVE" ? "danger" : "neutral"} />
-            </View>
-          ))
-        )}
+        <Text style={styles.cardTitle}>Coach profile</Text>
+        <Text style={styles.bold}>{profile.displayName}</Text>
+        <Badge label={profile.status} tone={profile.status === "ACTIVE" ? "success" : "neutral"} />
       </Card>
+
+      <StudentsGradesList students={students} />
+
+      <MembershipList memberships={affiliations} pendingRequests={pendingRequests} />
+      {affiliations.length === 0 && pendingRequests.length === 0 && <AcademySearchBox onJoined={load} />}
     </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   content: { padding: spacing.lg, gap: spacing.md },
-  statsGrid: { flexDirection: "row", flexWrap: "wrap", justifyContent: "space-between" },
-  cardTitle: { ...typography.subtitle, color: colors.textPrimary, marginBottom: spacing.sm },
-  studentRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    paddingVertical: spacing.xs,
+  cardTitle: { ...typography.subtitle, color: colors.textPrimary },
+  bold: {
+    ...typography.body,
+    fontWeight: "600",
+    color: colors.textPrimary,
+    marginTop: 4,
+    marginBottom: spacing.sm,
   },
-  bold: { ...typography.body, fontWeight: "600", color: colors.textPrimary },
-  muted: { ...typography.caption, color: colors.textMuted },
 });

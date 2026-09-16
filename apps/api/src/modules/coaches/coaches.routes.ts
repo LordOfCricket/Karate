@@ -9,6 +9,7 @@ import {
   updateCoachProfileHandler,
   listMyAffiliationsHandler,
   listMyPendingRequestsHandler,
+  listMyStudentsGradesHandler,
 } from "./coaches.controller";
 
 export const coachesRouter = Router();
@@ -19,3 +20,4 @@ coachesRouter.post("/profile", validate(createCoachProfileSchema), createCoachPr
 coachesRouter.patch("/profile", validate(updateCoachProfileSchema), updateCoachProfileHandler);
 coachesRouter.get("/me/affiliations", listMyAffiliationsHandler);
 coachesRouter.get("/me/requests", listMyPendingRequestsHandler);
+coachesRouter.get("/me/students-grades", listMyStudentsGradesHandler);

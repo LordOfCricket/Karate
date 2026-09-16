@@ -3,7 +3,11 @@ import { createScorerProfileSchema, updateScorerProfileSchema } from "@karate/va
 import { authenticate } from "../../middleware/auth";
 import { requireRole } from "../../middleware/rbac";
 import { validate } from "../../middleware/validate";
-import { createScorerProfileHandler, getMyScorerProfileHandler, updateScorerProfileHandler } from "./scorers.controller";
+import {
+  createScorerProfileHandler,
+  getMyScorerProfileHandler,
+  updateScorerProfileHandler,
+} from "./scorers.controller";
 
 export const scorersRouter = Router();
 

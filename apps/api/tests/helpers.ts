@@ -71,3 +71,55 @@ export async function createDraftTournament(organizerId: string, createdByUserId
     },
   });
 }
+
+/**
+ * Creates a tournament already in REGISTRATION_OPEN with one category and
+ * one competition, for registration tests — seeded directly via Prisma
+ * (bypassing the lifecycle transition endpoint) since test setup is allowed
+ * to establish arbitrary starting states, unlike application code.
+ */
+export async function createOpenTournamentWithCategory(
+  organizerId: string,
+  createdByUserId: string,
+  overrides?: { registrationOpensAt?: Date; registrationClosesAt?: Date },
+) {
+  const tournament = await prisma.tournament.create({
+    data: {
+      organizerId,
+      name: "Open Tournament",
+      slug: `open-tournament-${randomUUID()}`,
+      status: "REGISTRATION_OPEN",
+      registrationOpensAt: overrides?.registrationOpensAt,
+      registrationClosesAt: overrides?.registrationClosesAt,
+      createdByUserId,
+    },
+  });
+  const category = await prisma.category.create({
+    data: { tournamentId: tournament.id, name: "Senior -75kg" },
+  });
+  const competition = await prisma.competition.create({
+    data: { tournamentId: tournament.id, categoryId: category.id, discipline: "KUMITE", name: "Kumite Senior -75kg" },
+  });
+  return { tournament, category, competition };
+}
+
+/** Awards a player a VERIFIED, isCurrent belt grade directly, for tests that need a resolvable "verified current grade". */
+export async function createVerifiedBeltForPlayer(playerId: string) {
+  const style = await prisma.karateStyle.create({ data: { name: `Style-${randomUUID()}` } });
+  const beltSystem = await prisma.beltSystem.create({
+    data: { karateStyleId: style.id, name: `System-${randomUUID()}` },
+  });
+  const beltGrade = await prisma.beltGrade.create({
+    data: { beltSystemId: beltSystem.id, name: "1st Kyu", type: "KYU", rankOrder: 1 },
+  });
+  await prisma.playerBeltHistory.create({
+    data: {
+      playerId,
+      beltGradeId: beltGrade.id,
+      awardedDate: new Date(),
+      verificationStatus: "VERIFIED",
+      isCurrent: true,
+    },
+  });
+  return beltGrade;
+}

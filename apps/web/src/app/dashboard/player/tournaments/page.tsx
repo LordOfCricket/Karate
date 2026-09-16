@@ -1,5 +1,29 @@
-import { ComingSoon } from "@/components/layout/ComingSoon";
+import { getCurrentUserOrRedirect } from "@/lib/server/current-user";
+import { getMyRegistrations } from "@/lib/server/domain";
+import { TournamentBrowser } from "@/components/domain/TournamentBrowser";
+import { RegistrationsList } from "@/components/domain/RegistrationsList";
 
-export default function PlayerTournamentsPage() {
-  return <ComingSoon feature="Tournament registration" />;
+export default async function PlayerTournamentsPage({
+  searchParams,
+}: {
+  searchParams: { tournamentId?: string };
+}) {
+  await getCurrentUserOrRedirect("/dashboard/player/tournaments");
+  const registrations = await getMyRegistrations();
+  const registeredCompetitionIds = new Set(registrations.map((r) => r.competition.id));
+
+  return (
+    <div className="flex flex-col gap-6">
+      <TournamentBrowser
+        tournamentId={searchParams.tournamentId}
+        registeredCompetitionIds={registeredCompetitionIds}
+      />
+      <RegistrationsList
+        title="My registrations"
+        registrations={registrations}
+        canWithdraw
+        emptyDescription="Register for an open tournament above to see your status here."
+      />
+    </div>
+  );
 }

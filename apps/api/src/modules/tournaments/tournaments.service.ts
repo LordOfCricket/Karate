@@ -1,7 +1,75 @@
 import { prisma } from "@karate/database";
-import type { TransitionTournamentStatusRequest } from "@karate/validation";
+import type { ListTournamentsQuery, TransitionTournamentStatusRequest } from "@karate/validation";
 import { AuthorizationError, NotFoundError } from "@karate/shared";
 import { assertValidTournamentTransition } from "../../domain/tournamentLifecycle";
+
+const TOURNAMENT_SUMMARY_SELECT = {
+  id: true,
+  name: true,
+  slug: true,
+  venue: true,
+  countryCode: true,
+  status: true,
+  registrationOpensAt: true,
+  registrationClosesAt: true,
+  startDate: true,
+  endDate: true,
+} as const;
+
+/** Public browse list — no private organizer detail, paginated, indexed on `status`. */
+export async function listPublicTournaments(query: ListTournamentsQuery) {
+  const where = query.status ? { status: query.status } : {};
+  const [items, totalItems] = await Promise.all([
+    prisma.tournament.findMany({
+      where,
+      select: TOURNAMENT_SUMMARY_SELECT,
+      orderBy: { startDate: "asc" },
+      skip: (query.page - 1) * query.pageSize,
+      take: query.pageSize,
+    }),
+    prisma.tournament.count({ where }),
+  ]);
+  return {
+    items,
+    page: query.page,
+    pageSize: query.pageSize,
+    totalItems,
+    totalPages: Math.ceil(totalItems / query.pageSize),
+  };
+}
+
+/** Public detail — includes competitions/categories so a player can pick one to register into. */
+export async function getTournamentDetail(tournamentId: string) {
+  const tournament = await prisma.tournament.findUnique({
+    where: { id: tournamentId },
+    select: {
+      ...TOURNAMENT_SUMMARY_SELECT,
+      description: true,
+      competitions: {
+        select: {
+          id: true,
+          discipline: true,
+          name: true,
+          category: {
+            select: {
+              id: true,
+              name: true,
+              genderRestriction: true,
+              ageMin: true,
+              ageMax: true,
+              weightMinKg: true,
+              weightMaxKg: true,
+            },
+          },
+        },
+      },
+    },
+  });
+  if (!tournament) {
+    throw new NotFoundError("Tournament", tournamentId);
+  }
+  return tournament;
+}
 
 /**
  * Loads the tournament together with the organizer chain needed for
@@ -10,7 +78,7 @@ import { assertValidTournamentTransition } from "../../domain/tournamentLifecycl
  * organizer->academy chain, which only exists once this row is fetched —
  * fetching it twice would be wasted work for no safety benefit.
  */
-async function getTournamentWithOrganizer(tournamentId: string) {
+export async function getTournamentWithOrganizer(tournamentId: string) {
   const tournament = await prisma.tournament.findUnique({
     where: { id: tournamentId },
     include: { organizer: { include: { academy: true } } },
@@ -29,7 +97,7 @@ async function getTournamentWithOrganizer(tournamentId: string) {
  * concrete AcademyAdministrator row for the academy that actually organizes
  * this specific tournament.
  */
-async function assertUserCanManageTournament(
+export async function assertUserCanManageTournament(
   tournament: Awaited<ReturnType<typeof getTournamentWithOrganizer>>,
   userId: string,
 ): Promise<void> {
