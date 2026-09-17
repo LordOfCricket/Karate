@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { ActivityIndicator, ScrollView, StyleSheet, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { RegistrationsList } from "@/components/RegistrationsList";
 import { ProfileFormCard } from "@/components/ProfileFormCard";
 import { TextField } from "@/components/TextField";
@@ -7,6 +8,7 @@ import { apiClient, type CoachProfile, type RegistrationRow } from "@/lib/api-cl
 import { colors, spacing } from "@/theme/tokens";
 
 export default function CoachTournamentsScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [profile, setProfile] = useState<CoachProfile | null>(null);
   const [registrations, setRegistrations] = useState<RegistrationRow[]>([]);
@@ -51,6 +53,9 @@ export default function CoachTournamentsScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Pressable onPress={() => router.push("/schedule/mine")}>
+        <Text style={styles.scheduleLink}>View students&apos; upcoming bout schedule →</Text>
+      </Pressable>
       <RegistrationsList
         title="Students' tournament registrations"
         registrations={registrations}
@@ -65,4 +70,5 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.surface },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: colors.surface },
   content: { padding: spacing.lg, gap: spacing.md },
+  scheduleLink: { color: colors.accent, fontSize: 13, fontWeight: "600" },
 });

@@ -41,8 +41,9 @@ model RuleSetVersion {
   changeNotes   String?
   createdAt     DateTime  @default(now())
 
-  ruleSet      RuleSet       @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
+  ruleSet      RuleSet              @relation(fields: [ruleSetId], references: [id], onDelete: Restrict)
   competitions Competition[]
+  kumiteConfiguration KumiteConfiguration?
 
   @@unique([ruleSetId, version])
   @@map("rule_set_versions")
@@ -56,6 +57,8 @@ enum BoutResultMethod {
   WITHDRAWAL
   WALKOVER
   DRAW
+  NO_SHOW
+  INJURY
 }
 
 /// One row per judge/referee action. Never updated after insert; corrections
@@ -68,6 +71,8 @@ model ScoreEvent {
   targetPlayerId       String?    @db.Uuid
   officialAssignmentId String?    @db.Uuid
   points               Decimal?   @db.Decimal(6, 2)
+  /// Set only on a cancellation/correction event; the original event it reverses. The original row is never mutated or deleted.
+  reversesEventId      String?    @db.Uuid
   /// Idempotency key supplied by the scoring client; retries with the same
   /// key must not create a duplicate event.
   clientOperationId    String?    @unique
@@ -75,16 +80,43 @@ model ScoreEvent {
 
   bout               Bout                @relation(fields: [boutId], references: [id], onDelete: Cascade)
   officialAssignment OfficialAssignment? @relation(fields: [officialAssignmentId], references: [id], onDelete: SetNull)
+  reverses           ScoreEvent?         @relation("ScoreEventReversal", fields: [reversesEventId], references: [id], onDelete: SetNull)
+  reversedBy         ScoreEvent[]        @relation("ScoreEventReversal")
 
   @@index([boutId, recordedAt])
   @@map("score_events")
 }
 
+/// One row per RuleSetVersion — keeps Kumite scoring rule-driven instead of
+/// hard-coded, per the verified WKF Kumite Competition Rules (see ruleSetVersion.sourceUrl/sourceDate).
+model KumiteConfiguration {
+  id                      String   @id @default(uuid()) @db.Uuid
+  ruleSetVersionId        String   @unique @db.Uuid
+  yukoPoints              Int      @default(1)
+  wazaAriPoints           Int      @default(2)
+  ipponPoints             Int      @default(3)
+  clearLeadPoints         Int      @default(8)
+  senshuEnabled           Boolean  @default(true)
+  chuiLimit               Int      @default(3)
+  passivityProtectedSeconds Int    @default(15)
+  videoReviewEnabled      Boolean  @default(false)
+  twoJudgeMode            Boolean  @default(false)
+  panelJudgeCount         Int      @default(4)
+
+  ruleSetVersion RuleSetVersion @relation(fields: [ruleSetVersionId], references: [id], onDelete: Cascade)
+
+  @@map("kumite_configurations")
+}
+
+/// Mutable only while `isFinal` is false — once finalized, this row is
+/// never updated again through Phase 14's API (a later correction workflow
+/// is a distinct, explicitly-audited concern, not implemented here).
 model BoutResult {
   id                String           @id @default(uuid()) @db.Uuid
   boutId            String           @unique @db.Uuid
   winnerPlayerId    String?          @db.Uuid
   method            BoutResultMethod
+  reason            String?
   finalScoreRed     Int?
   finalScoreBlue    Int?
   isFinal           Boolean          @default(false)

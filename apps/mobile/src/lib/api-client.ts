@@ -251,6 +251,70 @@ export interface RegistrationRow {
   };
 }
 
+export interface DrawSeedRow {
+  registrationId: string;
+  playerId: string;
+  displayName: string;
+  seedNumber: number | null;
+  seedSource: string;
+  position: number;
+}
+export interface DrawBoutRow {
+  id: string;
+  sequenceNumber: number;
+  redPlayerId: string | null;
+  redPlayerName: string | null;
+  bluePlayerId: string | null;
+  bluePlayerName: string | null;
+  isBye: boolean;
+  status: string;
+}
+export interface DrawRoundRow {
+  id: string;
+  roundNumber: number;
+  name: string | null;
+  bouts: DrawBoutRow[];
+}
+export interface DrawDetail {
+  id: string;
+  competitionId: string;
+  version: number;
+  bracketType: string;
+  status: string;
+  seedingStrategy: string;
+  generatedAt: string;
+  seeds: DrawSeedRow[];
+  rounds: DrawRoundRow[];
+}
+
+export interface ScheduleEntryRow {
+  id: string;
+  boutId: string;
+  competitionId: string;
+  roundNumber: number;
+  roundName: string | null;
+  redPlayerId: string | null;
+  redPlayerName: string | null;
+  bluePlayerId: string | null;
+  bluePlayerName: string | null;
+  boutStatus: string;
+  tatami: { id: string; label: string } | null;
+  scheduledAt: string;
+  estimatedDurationMinutes: number;
+}
+
+export interface OfficialAssignmentRow {
+  id: string;
+  tournamentId: string;
+  tatamiId: string | null;
+  function: string;
+  status: string;
+  startAt: string | null;
+  endAt: string | null;
+  tournament?: { id: string; name: string; slug: string };
+  tatami?: { id: string; label: string } | null;
+}
+
 /** Same backend contracts as web — no auth logic is reimplemented here, only transported. */
 export const apiClient = {
   register: (input: RegisterRequest) =>
@@ -347,4 +411,35 @@ export const apiClient = {
     request<RegistrationRow[]>(`/api/v1/academies/${academyId}/registrations`, { withAuth: true }).catch(
       () => [],
     ),
+
+  getDraw: (competitionId: string) => requestOrNull<DrawDetail>(`/api/v1/competitions/${competitionId}/draw`),
+  generateDraw: (
+    competitionId: string,
+    input: {
+      bracketType: "SINGLE_ELIMINATION" | "ROUND_ROBIN";
+      seedingStrategy: "MANUAL" | "RANKING" | "RANDOM" | "NONE";
+      force?: boolean;
+    },
+  ) =>
+    request<DrawDetail>(`/api/v1/competitions/${competitionId}/draw`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
+  publishDraw: (drawId: string) =>
+    request<DrawDetail>(`/api/v1/draws/${drawId}/publish`, { method: "POST", withAuth: true }),
+  lockDraw: (drawId: string) =>
+    request<DrawDetail>(`/api/v1/draws/${drawId}/lock`, { method: "POST", withAuth: true }),
+
+  getMyUpcomingBouts: () =>
+    request<ScheduleEntryRow[]>("/api/v1/players/me/schedule", { withAuth: true }).catch(() => []),
+  getMyStudentsUpcomingBouts: () =>
+    request<ScheduleEntryRow[]>("/api/v1/coaches/me/students-schedule", { withAuth: true }).catch(() => []),
+  getAcademyUpcomingBouts: (academyId: string) =>
+    request<ScheduleEntryRow[]>(`/api/v1/academies/${academyId}/schedule`, { withAuth: true }).catch(
+      () => [],
+    ),
+
+  getMyAssignments: () =>
+    request<OfficialAssignmentRow[]>("/api/v1/scorers/me/assignments", { withAuth: true }).catch(() => []),
 };

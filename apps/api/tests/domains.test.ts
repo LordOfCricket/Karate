@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import request from "supertest";
+import { randomUUID } from "node:crypto";
 import { prisma } from "@karate/database";
 import { buildTestApp, registerAndLogin, createAcademyWithOrganizer } from "./helpers";
 
@@ -93,9 +94,13 @@ describe("academy", () => {
   it("finds academies via search", async () => {
     const owner = await registerAndLogin(app, "ACADEMY");
     const { academy } = await createAcademyWithOrganizer(owner.userId);
-    await prisma.academy.update({ where: { id: academy.id }, data: { name: "Unique Search Dojo Xyz" } });
+    // A unique name per run — a fixed literal here would accumulate duplicate rows
+    // across repeated test runs against the same persistent test database, making
+    // this test order/pagination-dependent instead of deterministic.
+    const uniqueName = `Unique Search Dojo ${randomUUID()}`;
+    await prisma.academy.update({ where: { id: academy.id }, data: { name: uniqueName } });
 
-    const res = await request(app).get("/api/v1/academies").query({ q: "Unique Search Dojo" });
+    const res = await request(app).get("/api/v1/academies").query({ q: uniqueName });
 
     expect(res.status).toBe(200);
     expect(res.body.data.items.some((a: { id: string }) => a.id === academy.id)).toBe(true);

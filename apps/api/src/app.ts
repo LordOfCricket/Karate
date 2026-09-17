@@ -23,6 +23,27 @@ import {
   coachStudentsRegistrationsRouter,
   academyRegistrationsRouter,
 } from "./modules/registrations/registrations.routes";
+import { competitionDrawRouter, drawsRouter } from "./modules/draws/draws.routes";
+import {
+  tournamentScheduleRouter,
+  schedulesRouter,
+  playerScheduleRouter,
+  coachStudentsScheduleRouter,
+  academyScheduleRouter,
+} from "./modules/scheduling/scheduling.routes";
+import { tournamentTatamisRouter, tatamisRouter, boutsRouter } from "./modules/tatamis/tatamis.routes";
+import {
+  tournamentOfficialsRouter,
+  officialAssignmentsRouter,
+  scorerAssignmentsRouter,
+} from "./modules/officials/officials.routes";
+import {
+  boutLifecycleRouter,
+  playerBoutsRouter,
+  coachStudentsBoutsRouter,
+  academyBoutsRouter,
+} from "./modules/bouts/bouts.routes";
+import { kumiteRouter } from "./modules/kumite/kumite.routes";
 
 export function createApp(env: ServerEnv, logger: Logger): Express {
   const app = express();
@@ -30,8 +51,8 @@ export function createApp(env: ServerEnv, logger: Logger): Express {
   app.disable("x-powered-by");
   app.use(helmet());
   app.use(cors({ origin: getCorsAllowedOrigins(env), credentials: true }));
-  app.use(express.json({ limit: "1mb" }));
   app.use(requestContext(logger));
+  app.use(express.json({ limit: "1mb" }));
   app.use(requestLogger);
 
   app.use("/health", healthRouter);
@@ -50,6 +71,24 @@ export function createApp(env: ServerEnv, logger: Logger): Express {
   app.use("/api/v1/registrations", registrationsRouter);
   app.use("/api/v1/coaches/me/students-registrations", coachStudentsRegistrationsRouter);
   app.use("/api/v1/academies/:academyId/registrations", academyRegistrationsRouter);
+  app.use("/api/v1/competitions/:competitionId/draw", competitionDrawRouter);
+  app.use("/api/v1/draws", drawsRouter);
+  app.use("/api/v1/tournaments/:tournamentId/schedule", tournamentScheduleRouter);
+  app.use("/api/v1/schedules", schedulesRouter);
+  app.use("/api/v1/players/me/schedule", playerScheduleRouter);
+  app.use("/api/v1/coaches/me/students-schedule", coachStudentsScheduleRouter);
+  app.use("/api/v1/academies/:academyId/schedule", academyScheduleRouter);
+  app.use("/api/v1/tournaments/:tournamentId/tatamis", tournamentTatamisRouter);
+  app.use("/api/v1/tatamis", tatamisRouter);
+  app.use("/api/v1/bouts", boutsRouter);
+  app.use("/api/v1/bouts", boutLifecycleRouter);
+  app.use("/api/v1/bouts/:boutId/kumite", kumiteRouter);
+  app.use("/api/v1/tournaments/:tournamentId/officials", tournamentOfficialsRouter);
+  app.use("/api/v1/official-assignments", officialAssignmentsRouter);
+  app.use("/api/v1/scorers/me/assignments", scorerAssignmentsRouter);
+  app.use("/api/v1/players/me/bouts", playerBoutsRouter);
+  app.use("/api/v1/coaches/me/students-bouts", coachStudentsBoutsRouter);
+  app.use("/api/v1/academies/:academyId/bouts", academyBoutsRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

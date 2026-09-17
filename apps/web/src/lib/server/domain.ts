@@ -324,3 +324,114 @@ export const getMyStudentsRegistrations = () =>
   fetchOrEmpty<RegistrationRow>("/api/v1/coaches/me/students-registrations");
 export const getAcademyRegistrations = (academyId: string) =>
   fetchOrEmpty<RegistrationRow>(`/api/v1/academies/${academyId}/registrations`);
+
+// ---- Draw / bracket domain ----
+
+export interface DrawSeedRow {
+  registrationId: string;
+  playerId: string;
+  displayName: string;
+  seedNumber: number | null;
+  seedSource: string;
+  position: number;
+}
+export interface DrawBoutRow {
+  id: string;
+  sequenceNumber: number;
+  redPlayerId: string | null;
+  redPlayerName: string | null;
+  bluePlayerId: string | null;
+  bluePlayerName: string | null;
+  isBye: boolean;
+  status: string;
+}
+export interface DrawRoundRow {
+  id: string;
+  roundNumber: number;
+  name: string | null;
+  bouts: DrawBoutRow[];
+}
+export interface DrawDetail {
+  id: string;
+  competitionId: string;
+  version: number;
+  bracketType: string;
+  status: string;
+  seedingStrategy: string;
+  generatedAt: string;
+  seeds: DrawSeedRow[];
+  rounds: DrawRoundRow[];
+}
+
+export const getDraw = (competitionId: string) =>
+  fetchOrNull<DrawDetail>(`/api/v1/competitions/${competitionId}/draw`);
+
+// ---- Scheduling domain ----
+
+export interface ScheduleEntryRow {
+  id: string;
+  boutId: string;
+  competitionId: string;
+  roundNumber: number;
+  roundName: string | null;
+  redPlayerId: string | null;
+  redPlayerName: string | null;
+  bluePlayerId: string | null;
+  bluePlayerName: string | null;
+  boutStatus: string;
+  tatami: { id: string; label: string } | null;
+  scheduledAt: string;
+  estimatedDurationMinutes: number;
+  sequenceOrder?: number;
+}
+export interface ScheduleDetail {
+  id: string;
+  tournamentId: string;
+  version: number;
+  status: string;
+  delayMinutes: number;
+  generatedAt: string;
+  entries: ScheduleEntryRow[];
+}
+
+export const getSchedule = (tournamentId: string) =>
+  fetchOrNull<ScheduleDetail>(`/api/v1/tournaments/${tournamentId}/schedule`);
+export const getMyUpcomingBouts = () => fetchOrEmpty<ScheduleEntryRow>("/api/v1/players/me/schedule");
+export const getMyStudentsUpcomingBouts = () =>
+  fetchOrEmpty<ScheduleEntryRow>("/api/v1/coaches/me/students-schedule");
+export const getAcademyUpcomingBouts = (academyId: string) =>
+  fetchOrEmpty<ScheduleEntryRow>(`/api/v1/academies/${academyId}/schedule`);
+
+// ---- Tatami domain ----
+
+export interface TatamiRow {
+  id: string;
+  tournamentId: string;
+  label: string;
+  status: string;
+}
+
+export const getTatamis = (tournamentId: string) =>
+  fetchOrEmpty<TatamiRow>(`/api/v1/tournaments/${tournamentId}/tatamis`);
+
+// ---- Official assignment domain ----
+
+export interface OfficialAssignmentRow {
+  id: string;
+  tournamentId: string;
+  competitionId: string | null;
+  tatamiId: string | null;
+  scorerProfileId: string;
+  function: string;
+  status: string;
+  startAt: string | null;
+  endAt: string | null;
+  assignedAt: string;
+  tournament?: { id: string; name: string; slug: string };
+  tatami?: { id: string; label: string } | null;
+  scorerProfile?: { id: string; displayName: string };
+}
+
+export const getMyAssignments = () => fetchOrEmpty<OfficialAssignmentRow>("/api/v1/scorers/me/assignments");
+export const getTournamentAssignments = (tournamentId: string) =>
+  fetchOrEmpty<OfficialAssignmentRow>(`/api/v1/tournaments/${tournamentId}/officials`);

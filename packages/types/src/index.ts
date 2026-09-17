@@ -5,3 +5,6 @@ export * from "./membership";
 export * from "./api";
 export * from "./grading";
 export * from "./registration";
+export * from "./draw";
+export * from "./scheduling";
+export * from "./kumite";

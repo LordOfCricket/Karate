@@ -58,7 +58,7 @@ function isUniqueConstraintError(error: unknown): boolean {
  * category actually has a weight bound; disciplines/categories with none
  * are never held back waiting for a measurement that was never required.
  */
-function computeReadiness(
+export function computeReadiness(
   eligibilityStatus: string,
   medicalIsValid: boolean,
   weighInApplicable: boolean,
@@ -369,4 +369,25 @@ export async function listMyStudentsRegistrations(actorUserId: string) {
     orderBy: { submittedAt: "desc" },
   });
   return registrations.map(toDto);
+}
+
+/**
+ * The single place that resolves "who is actually allowed into a draw" for
+ * a competition — reused by the draw engine so it never re-derives
+ * readiness itself (that would be a second, driftable copy of this exact
+ * logic). WITHDRAWN/REJECTED registrations are excluded outright before
+ * readiness is even computed; a CONFIRMED/VERIFIED/SUBMITTED registration
+ * still has to be actually READY (eligible + medically cleared + weigh-in
+ * satisfied where applicable) to qualify.
+ */
+export async function listReadyRegistrationsForCompetition(competitionId: string) {
+  const registrations = await prisma.registration.findMany({
+    where: { competitionId, status: { notIn: ["WITHDRAWN", "REJECTED"] } },
+    include: REGISTRATION_INCLUDE,
+    orderBy: { submittedAt: "asc" },
+  });
+  return registrations
+    .map(toDto)
+    .filter((r) => r.readiness.status === "READY")
+    .map((r) => ({ registrationId: r.id, playerId: r.player.id, submittedAt: r.submittedAt }));
 }

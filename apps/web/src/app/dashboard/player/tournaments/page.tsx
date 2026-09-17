@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { getCurrentUserOrRedirect } from "@/lib/server/current-user";
 import { getMyRegistrations } from "@/lib/server/domain";
 import { TournamentBrowser } from "@/components/domain/TournamentBrowser";
@@ -14,6 +15,9 @@ export default async function PlayerTournamentsPage({
 
   return (
     <div className="flex flex-col gap-6">
+      <Link href="/dashboard/player/schedule" className="text-sm text-accent hover:underline">
+        View my upcoming bout schedule →
+      </Link>
       <TournamentBrowser
         tournamentId={searchParams.tournamentId}
         registeredCompetitionIds={registeredCompetitionIds}
@@ -22,6 +26,7 @@ export default async function PlayerTournamentsPage({
         title="My registrations"
         registrations={registrations}
         canWithdraw
+        bracketBasePath="/dashboard/player"
         emptyDescription="Register for an open tournament above to see your status here."
       />
     </div>

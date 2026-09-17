@@ -1,5 +1,6 @@
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from "react-native";
 import { useState } from "react";
+import { useRouter } from "expo-router";
 import { Card } from "./Card";
 import { Badge } from "./Badge";
 import { EmptyState } from "./EmptyState";
@@ -69,6 +70,7 @@ export function RegistrationsList({
 }) {
   const [withdrawingId, setWithdrawingId] = useState<string | null>(null);
   const [reevaluatingId, setReevaluatingId] = useState<string | null>(null);
+  const router = useRouter();
 
   async function handleWithdraw(id: string) {
     if (!onWithdraw) return;
@@ -162,6 +164,9 @@ export function RegistrationsList({
                   )}
                 </Pressable>
               )}
+              <Pressable onPress={() => router.push(`/bracket/${r.competition.id}`)}>
+                <Text style={styles.bracketLink}>View bracket</Text>
+              </Pressable>
             </View>
           </View>
         ))
@@ -200,4 +205,5 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   recheckText: { color: colors.textPrimary, fontWeight: "600", fontSize: 12 },
+  bracketLink: { color: colors.accent, fontSize: 12, fontWeight: "600" },
 });

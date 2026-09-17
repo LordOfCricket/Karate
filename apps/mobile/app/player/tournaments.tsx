@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useRouter } from "expo-router";
 import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
 import { EmptyState } from "@/components/EmptyState";
@@ -60,6 +61,7 @@ function CompetitionRow({
 }
 
 export default function PlayerTournamentsScreen() {
+  const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [tournaments, setTournaments] = useState<TournamentSummary[]>([]);
   const [selected, setSelected] = useState<TournamentDetail | null>(null);
@@ -130,6 +132,9 @@ export default function PlayerTournamentsScreen() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
+      <Pressable onPress={() => router.push("/schedule/mine")}>
+        <Text style={styles.backLink}>View my upcoming bout schedule →</Text>
+      </Pressable>
       {error && (
         <Card>
           <Text style={styles.errorText}>{error}</Text>

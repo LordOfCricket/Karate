@@ -81,6 +81,7 @@ model Tournament {
   categories          Category[]
   tatamis             Tatami[]
   officialAssignments OfficialAssignment[]
+  schedules           Schedule[]
   protests            Protest[]
   incidents           Incident[]
   stats               TournamentStats?
@@ -108,17 +109,19 @@ model TournamentStatusHistory {
 
 /// Tournament-scoped competition category (age/gender/weight/style band).
 model Category {
-  id                String            @id @default(uuid()) @db.Uuid
-  tournamentId      String            @db.Uuid
-  karateStyleId     String?           @db.Uuid
-  name              String
-  genderRestriction GenderRestriction @default(OPEN)
-  ageMin            Int?
-  ageMax            Int?
-  weightMinKg       Decimal?          @db.Decimal(5, 2)
-  weightMaxKg       Decimal?          @db.Decimal(5, 2)
-  beltGradeMinOrder Int?
-  beltGradeMaxOrder Int?
+  id                           String            @id @default(uuid()) @db.Uuid
+  tournamentId                 String            @db.Uuid
+  karateStyleId                String?           @db.Uuid
+  name                         String
+  genderRestriction            GenderRestriction @default(OPEN)
+  ageMin                       Int?
+  ageMax                       Int?
+  weightMinKg                  Decimal?          @db.Decimal(5, 2)
+  weightMaxKg                  Decimal?          @db.Decimal(5, 2)
+  beltGradeMinOrder            Int?
+  beltGradeMaxOrder            Int?
+  /// Overrides the scheduler's default per-bout duration for this category. Null = use the default.
+  estimatedBoutDurationMinutes Int?
 
   tournament   Tournament    @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
   karateStyle  KarateStyle?  @relation(fields: [karateStyleId], references: [id], onDelete: SetNull)
@@ -139,11 +142,12 @@ model Competition {
   name             String
   createdAt        DateTime   @default(now())
 
-  tournament     Tournament      @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
-  category       Category        @relation(fields: [categoryId], references: [id], onDelete: Restrict)
-  ruleSetVersion RuleSetVersion? @relation(fields: [ruleSetVersionId], references: [id], onDelete: SetNull)
-  registrations  Registration[]
-  draws          Draw[]
+  tournament          Tournament           @relation(fields: [tournamentId], references: [id], onDelete: Cascade)
+  category            Category             @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  ruleSetVersion      RuleSetVersion?      @relation(fields: [ruleSetVersionId], references: [id], onDelete: SetNull)
+  registrations       Registration[]
+  draws               Draw[]
+  officialAssignments OfficialAssignment[]
 
   @@index([tournamentId, discipline])
   @@map("competitions")

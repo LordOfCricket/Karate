@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
@@ -55,6 +56,7 @@ export function RegistrationsList({
   canWithdraw = false,
   canReevaluate = canWithdraw,
   showPlayer = false,
+  bracketBasePath,
   emptyTitle = "No registrations yet",
   emptyDescription,
 }: {
@@ -64,6 +66,8 @@ export function RegistrationsList({
   /** Defaults to the same authorization as withdrawal — the backend accepts re-evaluation from the same set of actors (owner player, representing academy admin, submitting coach). */
   canReevaluate?: boolean;
   showPlayer?: boolean;
+  /** e.g. "/dashboard/player" — when set, each row links to its competition's bracket at `${bracketBasePath}/bracket/${competitionId}`. */
+  bracketBasePath?: string;
   emptyTitle?: string;
   emptyDescription?: string;
 }) {
@@ -121,6 +125,14 @@ export function RegistrationsList({
                 </div>
                 {canWithdraw && r.status === "SUBMITTED" && <WithdrawButton registrationId={r.id} />}
                 {canReevaluate && <ReevaluateButton registrationId={r.id} />}
+                {bracketBasePath && (
+                  <Link
+                    href={`${bracketBasePath}/bracket/${r.competition.id}`}
+                    className="text-xs text-accent hover:underline"
+                  >
+                    View bracket
+                  </Link>
+                )}
               </div>
             </div>
           ))

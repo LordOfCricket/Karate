@@ -73,6 +73,7 @@ model Registration {
   eligibilityCheck        EligibilityCheck?
   medicalClearance        MedicalClearance?
   weighInAttempts         WeighInAttempt[]
+  drawSeeds               DrawSeed[]
 
   @@unique([competitionId, playerId])
   @@index([status])

@@ -35,6 +35,7 @@ model PlayerProfile {
   rankingEvents         RankingPointsEvent[]
   membershipRequests    AcademyMembershipRequest[] @relation("MembershipRequestPlayer")
   gradingParticipations GradingParticipant[]
+  drawSeeds             DrawSeed[]
 
   @@index([userId])
   @@map("player_profiles")
