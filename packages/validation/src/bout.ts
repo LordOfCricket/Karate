@@ -11,6 +11,16 @@ export const recordBoutResultSchema = z.object({
 });
 export type RecordBoutResultRequest = z.infer<typeof recordBoutResultSchema>;
 
+export const correctBoutResultSchema = z.object({
+  winnerPlayerId: uuidSchema.nullable().optional(),
+  winnerTeamId: uuidSchema.nullable().optional(),
+  method: z.enum(BOUT_RESULT_METHODS).optional(),
+  finalScoreRed: z.number().int().min(0).nullable().optional(),
+  finalScoreBlue: z.number().int().min(0).nullable().optional(),
+  reason: z.string().trim().max(500).optional(),
+  correctionReason: z.string().trim().min(1).max(500),
+});
+
 export const cancelBoutSchema = z.object({
   reason: z.string().trim().min(1).max(500),
 });

@@ -6,6 +6,9 @@ import {
   applyKumitePenaltySchema,
   submitHanteiVotesSchema,
   finalizeKumiteResultSchema,
+  requestVideoReviewSchema,
+  decideVideoReviewSchema,
+  videoReviewIdParamsSchema,
 } from "@karate/validation";
 import { authenticate } from "../../middleware/auth";
 import { requireRole } from "../../middleware/rbac";
@@ -20,6 +23,8 @@ import {
   startKumiteClockHandler,
   pauseKumiteClockHandler,
   resumeKumiteClockHandler,
+  requestVideoReviewHandler,
+  decideVideoReviewHandler,
 } from "./kumite.controller";
 
 /** Mounted at /api/v1/bouts/:boutId/kumite in app.ts. Function-level authorization (REFEREE/JUDGE/TIMEKEEPER, and tournament/tatami/competition scope) is enforced inside kumite.service.ts, not here — only a SCORER-role account can even reach these actions. */
@@ -92,4 +97,22 @@ kumiteRouter.post(
   requireRole("SCORER"),
   validate(boutIdParamsSchema, "params"),
   resumeKumiteClockHandler,
+);
+
+kumiteRouter.post(
+  "/video-review",
+  authenticate,
+  requireRole("COACH"),
+  validate(boutIdParamsSchema, "params"),
+  validate(requestVideoReviewSchema),
+  requestVideoReviewHandler,
+);
+
+kumiteRouter.post(
+  "/video-review/:requestId/decide",
+  authenticate,
+  requireRole("SCORER"),
+  validate(videoReviewIdParamsSchema, "params"),
+  validate(decideVideoReviewSchema),
+  decideVideoReviewHandler,
 );

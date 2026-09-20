@@ -111,6 +111,9 @@ model Bout {
   sequenceNumber Int
   redPlayerId    String?    @db.Uuid
   bluePlayerId   String?    @db.Uuid
+  /// Team Kata (Art. 3.5) — exactly one of (redPlayerId+bluePlayerId) or (redTeamId+blueTeamId) is set, validated in kata.service.ts, never at the DB level.
+  redTeamId      String?    @db.Uuid
+  blueTeamId     String?    @db.Uuid
   status         BoutStatus @default(SCHEDULED)
   startedAt      DateTime?
   endedAt        DateTime?
@@ -124,11 +127,15 @@ model Bout {
   tatami        Tatami?        @relation(fields: [tatamiId], references: [id], onDelete: SetNull)
   redPlayer     PlayerProfile? @relation("BoutRedPlayer", fields: [redPlayerId], references: [id], onDelete: SetNull)
   bluePlayer    PlayerProfile? @relation("BoutBluePlayer", fields: [bluePlayerId], references: [id], onDelete: SetNull)
+  redTeam       KataTeam?      @relation("BoutRedTeam", fields: [redTeamId], references: [id], onDelete: SetNull)
+  blueTeam      KataTeam?      @relation("BoutBlueTeam", fields: [blueTeamId], references: [id], onDelete: SetNull)
   scoreEvents   ScoreEvent[]
   result        BoutResult?
   protests      Protest[]
   incidents     Incident[]
   boutSchedules BoutSchedule[]
+  videoReviewRequests VideoReviewRequest[]
+  kataPerformance     KataPerformance?
 
   @@unique([roundId, sequenceNumber])
   @@index([status])

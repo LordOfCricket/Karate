@@ -12,3 +12,4 @@ export * from "./tatami";
 export * from "./official";
 export * from "./bout";
 export * from "./kumite";
+export * from "./kata";

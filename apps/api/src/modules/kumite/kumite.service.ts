@@ -1,4 +1,5 @@
 import { prisma } from "@karate/database";
+import { randomUUID } from "node:crypto";
 import type { OfficialFunction } from "@karate/types";
 import { AuthorizationError, ConflictError, NotFoundError, ValidationError } from "@karate/shared";
 import {
@@ -14,6 +15,8 @@ import {
 } from "../../domain/kumiteEngine";
 import { applyBoutResult } from "../bouts/bouts.service";
 import { recordAudit } from "../../lib/audit";
+import { emitCompetitionEvent } from "../../lib/realtime";
+import { processFinalizedResult } from "../stats/stats.service";
 
 const DEFAULT_CONFIG: KumiteConfig = {
   yukoPoints: 1,
@@ -22,6 +25,8 @@ const DEFAULT_CONFIG: KumiteConfig = {
   clearLeadPoints: 8,
   senshuEnabled: true,
   chuiLimit: 3,
+  twoJudgeMode: false,
+  videoReviewEnabled: false,
 };
 
 /** Art. 12.2.8-9 — the infraction types that can strip an already-awarded SENSHU. */
@@ -136,11 +141,47 @@ function toRawEvents(bout: KumiteBout): RawKumiteEvent[] {
     targetPlayerId: e.targetPlayerId,
     points: e.points ? Number(e.points) : null,
     reversesEventId: e.reversesEventId,
-    recordedAt: e.recordedAt,
+    sequence: e.sequence,
+    batchId: e.batchId,
+    simultaneousWithEventId: e.simultaneousWithEventId,
   }));
 }
 
-export async function getKumiteState(boutId: string) {
+/**
+ * Art. 14.8 — a review covers "the last 6 seconds before the bout was
+ * stopped," i.e. the exchange immediately preceding the request. Returns the
+ * most recent still-active (not cancelled) score event, if any, so an
+ * eventually-UPHELD request can be merged into that same exchange for SENSHU
+ * purposes instead of being evaluated as happening "now" (Art. 12.2.9).
+ */
+function findMostRecentActiveScoreEventId(bout: KumiteBout): string | null {
+  const reversed = new Set(
+    bout.scoreEvents.filter((e) => e.eventType === "SCORE_CANCELLED" && e.reversesEventId).map((e) => e.reversesEventId),
+  );
+  const scoreEvents = bout.scoreEvents
+    .filter((e) => (e.eventType === "YUKO" || e.eventType === "WAZA_ARI" || e.eventType === "IPPON") && !reversed.has(e.id))
+    .sort((a, b) => b.sequence - a.sequence);
+  return scoreEvents[0]?.id ?? null;
+}
+
+/** Non-throwing — used only to tell the UI which controls to render for the current viewer, never for authorization itself (each action re-checks independently). */
+async function tryResolveMyOfficialFunction(bout: KumiteBout, actorUserId: string | null) {
+  if (!actorUserId) return null;
+  const scorerProfile = await prisma.scorerProfile.findUnique({ where: { userId: actorUserId } });
+  if (!scorerProfile) return null;
+  const tournamentId = bout.round.draw.competition.tournamentId;
+  const competitionId = bout.round.draw.competitionId;
+  const tatamiId = bout.boutSchedules[0]?.tatami?.id ?? null;
+  const assignments = await prisma.officialAssignment.findMany({
+    where: { scorerProfileId: scorerProfile.id, tournamentId, status: { in: ["ASSIGNED", "CONFIRMED"] } },
+  });
+  const match = assignments.find(
+    (a) => (!a.competitionId || a.competitionId === competitionId) && (!a.tatamiId || a.tatamiId === tatamiId),
+  );
+  return match?.function ?? null;
+}
+
+export async function getKumiteState(boutId: string, actorUserId: string | null = null) {
   const bout = await loadBoutForKumite(boutId);
   const config = await getConfig(bout.round.draw.competition.ruleSetVersionId);
   const state =
@@ -159,25 +200,59 @@ export async function getKumiteState(boutId: string) {
       ? Math.floor((Date.now() - bout.clockLastStartedAt.getTime()) / 1000)
       : 0);
 
+  const tournamentId = bout.round.draw.competition.tournamentId;
+  const competitionId = bout.round.draw.competitionId;
+  const tatamiId = bout.boutSchedules[0]?.tatami?.id ?? null;
+  const panelAssignments = await prisma.officialAssignment.findMany({
+    where: {
+      tournamentId,
+      status: { in: ["ASSIGNED", "CONFIRMED"] },
+      function: { in: ["REFEREE", "JUDGE"] },
+    },
+    select: { id: true, function: true, competitionId: true, tatamiId: true, scorerProfile: { select: { displayName: true } } },
+  });
+  const panelOfficials = panelAssignments
+    .filter((a) => (!a.competitionId || a.competitionId === competitionId) && (!a.tatamiId || a.tatamiId === tatamiId))
+    .map((a) => ({ id: a.id, function: a.function, displayName: a.scorerProfile.displayName }));
+
+  const videoReviewRequests = await prisma.videoReviewRequest.findMany({
+    where: { boutId },
+    orderBy: { requestedAt: "asc" },
+  });
+
   return {
     boutId: bout.id,
     status: bout.status,
     redPlayerId: bout.redPlayerId,
     bluePlayerId: bout.bluePlayerId,
     state,
+    config: { twoJudgeMode: config.twoJudgeMode, videoReviewEnabled: config.videoReviewEnabled },
+    myOfficialFunction: await tryResolveMyOfficialFunction(bout, actorUserId),
+    panelOfficials,
     clock: {
       durationSeconds,
       elapsedSeconds: Math.min(elapsedNow, durationSeconds),
       remainingSeconds: Math.max(durationSeconds - elapsedNow, 0),
       running: bout.clockRunning,
     },
-    events: bout.scoreEvents.map((e) => ({
-      id: e.id,
-      eventType: e.eventType,
-      targetPlayerId: e.targetPlayerId,
-      points: e.points ? Number(e.points) : null,
-      reversesEventId: e.reversesEventId,
-      recordedAt: e.recordedAt,
+    events: [...bout.scoreEvents]
+      .sort((a, b) => a.sequence - b.sequence)
+      .map((e) => ({
+        id: e.id,
+        eventType: e.eventType,
+        targetPlayerId: e.targetPlayerId,
+        points: e.points ? Number(e.points) : null,
+        reversesEventId: e.reversesEventId,
+        recordedAt: e.recordedAt,
+      })),
+    videoReviewRequests: videoReviewRequests.map((v) => ({
+      id: v.id,
+      requestedForPlayerId: v.requestedForPlayerId,
+      requestedScoreType: v.requestedScoreType,
+      status: v.status,
+      decisionNotes: v.decisionNotes,
+      requestedAt: v.requestedAt,
+      decidedAt: v.decidedAt,
     })),
   };
 }
@@ -193,12 +268,30 @@ export async function submitKumiteScore(
   await resolveOfficialAssignment(bout, actorUserId, ["REFEREE"]);
   await assertSignalsBelongToValidOfficials(bout, input.signals);
 
-  const awarded = aggregateJudgeSignals(input.signals, bout.redPlayerId, bout.bluePlayerId);
+  const config = await getConfig(bout.round.draw.competition.ruleSetVersionId);
+  // Standard panel (Art. 12.1.1): only the 4 corner Judges' signals count toward the 2-signal threshold.
+  // Two-Judge Youth League panel (Appendix 5, point 3): "two Judges, OR one Judge plus the Referee" — the
+  // Referee's own signal counts too. Same aggregation math either way — only which signals are eligible differs.
+  const functionByAssignmentId = new Map(
+    (
+      await prisma.officialAssignment.findMany({
+        where: { id: { in: [...new Set(input.signals.map((s) => s.officialAssignmentId))] } },
+        select: { id: true, function: true },
+      })
+    ).map((a) => [a.id, a.function]),
+  );
+  const effectiveSignals = config.twoJudgeMode
+    ? input.signals
+    : input.signals.filter((s) => functionByAssignmentId.get(s.officialAssignmentId) === "JUDGE");
+
+  const awarded = aggregateJudgeSignals(effectiveSignals, bout.redPlayerId, bout.bluePlayerId);
   if (awarded.length === 0) {
     throw new ConflictError("No athlete reached the required two-judge scoring threshold (Art. 8.1/12.1.1).");
   }
 
-  const config = await getConfig(bout.round.draw.competition.ruleSetVersionId);
+  // Both scores from this one referee decision share a batchId, so state-replay treats them as
+  // one simultaneous exchange (Art. 12.1.2/12.2.2) regardless of individual insert order.
+  const batchId = awarded.length > 1 ? randomUUID() : null;
   for (const score of awarded) {
     const key = score.targetPlayerId === bout.redPlayerId ? input.clientOperationId : `${input.clientOperationId}:2`;
     try {
@@ -210,6 +303,7 @@ export async function submitKumiteScore(
           targetPlayerId: score.targetPlayerId,
           points: pointsForScoreType(score.scoreType, config),
           clientOperationId: key,
+          batchId,
         },
       });
     } catch (error) {
@@ -217,7 +311,9 @@ export async function submitKumiteScore(
     }
   }
   await recordAudit(actorUserId, "KUMITE_SCORE_AWARDED", "Bout", boutId, { awarded });
-  return getKumiteState(boutId);
+  const updatedState = await getKumiteState(boutId);
+  emitCompetitionEvent({ eventType: "SCORE_UPDATED", entityType: "Bout", entityId: boutId, tournamentId: bout.round.draw.competition.tournamentId, payload: { state: updatedState }, actorUserId });
+  return updatedState;
 }
 
 export async function cancelKumiteScore(
@@ -253,7 +349,9 @@ export async function cancelKumiteScore(
     if (!isUniqueConstraintError(error)) throw error;
   }
   await recordAudit(actorUserId, "KUMITE_SCORE_CANCELLED", "Bout", boutId, { eventId: input.eventId });
-  return getKumiteState(boutId);
+  const state = await getKumiteState(boutId);
+  emitCompetitionEvent({ eventType: "SCORE_UPDATED", entityType: "Bout", entityId: boutId, tournamentId: bout.round.draw.competition.tournamentId, payload: { state }, actorUserId });
+  return state;
 }
 
 export async function applyKumitePenalty(
@@ -314,7 +412,9 @@ export async function applyKumitePenalty(
     applied: actualLevel,
     reasonCode: input.reasonCode,
   });
-  return getKumiteState(boutId);
+  const updatedState = await getKumiteState(boutId);
+  emitCompetitionEvent({ eventType: "SCORE_UPDATED", entityType: "Bout", entityId: boutId, tournamentId: bout.round.draw.competition.tournamentId, payload: { state: updatedState }, actorUserId });
+  return updatedState;
 }
 
 export async function submitHanteiVotes(
@@ -362,7 +462,9 @@ export async function submitHanteiVotes(
     }
   }
   await recordAudit(actorUserId, "KUMITE_HANTEI_RECORDED", "Bout", boutId, { votes: input.votes });
-  return getKumiteState(boutId);
+  const state = await getKumiteState(boutId);
+  emitCompetitionEvent({ eventType: "SCORE_UPDATED", entityType: "Bout", entityId: boutId, tournamentId, payload: { state }, actorUserId });
+  return state;
 }
 
 function mapReasonToMethod(reasonCode: string): "POINTS" | "DISQUALIFICATION" | "NO_SHOW" | "DRAW" {
@@ -422,11 +524,14 @@ export async function finalizeKumiteResult(
     finalScoreBlue: state.blueScore,
     reason: decision.reasonCode,
   });
+  await prisma.boutResult.update({ where: { boutId }, data: { isFinal: true, confirmedByUserId: actorUserId } });
+  await processFinalizedResult(boutId, actorUserId);
   await recordAudit(actorUserId, "KUMITE_RESULT_FINALIZED", "Bout", boutId, {
     reasonCode: decision.reasonCode,
     winnerPlayerId: decision.winnerPlayerId,
   });
-  return result;
+  emitCompetitionEvent({ eventType: "RESULT_FINALIZED", entityType: "Bout", entityId: boutId, tournamentId: bout.round.draw.competition.tournamentId, payload: { result }, actorUserId });
+  return { ...result, result: result.result ? { ...result.result, isFinal: true } : result.result };
 }
 
 async function assertClockActor(bout: KumiteBout, actorUserId: string) {
@@ -441,7 +546,9 @@ export async function startKumiteClock(boutId: string, actorUserId: string) {
   }
   await prisma.bout.update({ where: { id: boutId }, data: { clockRunning: true, clockLastStartedAt: new Date() } });
   await recordAudit(actorUserId, "KUMITE_CLOCK_STARTED", "Bout", boutId);
-  return getKumiteState(boutId);
+  const state = await getKumiteState(boutId);
+  emitCompetitionEvent({ eventType: "TIMER_UPDATED", entityType: "Bout", entityId: boutId, tournamentId: bout.round.draw.competition.tournamentId, payload: { state }, actorUserId });
+  return state;
 }
 
 export async function pauseKumiteClock(boutId: string, actorUserId: string) {
@@ -456,9 +563,150 @@ export async function pauseKumiteClock(boutId: string, actorUserId: string) {
     data: { clockRunning: false, clockLastStartedAt: null, clockElapsedSeconds: elapsed },
   });
   await recordAudit(actorUserId, "KUMITE_CLOCK_PAUSED", "Bout", boutId);
-  return getKumiteState(boutId);
+  const state = await getKumiteState(boutId);
+  emitCompetitionEvent({ eventType: "TIMER_UPDATED", entityType: "Bout", entityId: boutId, tournamentId: bout.round.draw.competition.tournamentId, payload: { state }, actorUserId });
+  return state;
 }
 
 export async function resumeKumiteClock(boutId: string, actorUserId: string) {
   return startKumiteClock(boutId, actorUserId);
+}
+
+/** Same "students" relationship reused across the platform (registrations/scheduling/bouts): an ACTIVE coach affiliation and an ACTIVE player membership sharing the same academy. */
+async function assertActorIsCoachOfPlayer(actorUserId: string, playerId: string) {
+  const coachProfile = await prisma.coachProfile.findUnique({ where: { userId: actorUserId } });
+  if (!coachProfile) {
+    throw new AuthorizationError("Only the athlete's assigned Coach may request a video review (Art. 14.2).");
+  }
+  const activeAcademyIds = (
+    await prisma.academyCoachAffiliation.findMany({
+      where: { coachId: coachProfile.id, status: "ACTIVE" },
+      select: { academyId: true },
+    })
+  ).map((a) => a.academyId);
+  const membership =
+    activeAcademyIds.length > 0
+      ? await prisma.academyPlayerMembership.findFirst({
+          where: { playerId, academyId: { in: activeAcademyIds }, status: "ACTIVE" },
+        })
+      : null;
+  if (!membership) {
+    throw new AuthorizationError("You are not the assigned Coach for this athlete.");
+  }
+}
+
+/** Art. 14 — Coach-initiated video review request. Video review must be enabled for this competition's KumiteConfiguration, and only the requested athlete's own Coach may raise it. */
+export async function requestVideoReview(
+  boutId: string,
+  actorUserId: string,
+  input: { requestedForPlayerId: string; requestedScoreType?: "YUKO" | "WAZA_ARI" | "IPPON" },
+) {
+  const bout = await loadBoutForKumite(boutId);
+  assertBoutHasTwoParticipants(bout);
+  assertBoutIsActive(bout);
+
+  const config = await getConfig(bout.round.draw.competition.ruleSetVersionId);
+  if (!config.videoReviewEnabled) {
+    throw new ConflictError("Video review is not enabled for this competition.");
+  }
+  if (input.requestedForPlayerId !== bout.redPlayerId && input.requestedForPlayerId !== bout.bluePlayerId) {
+    throw new ValidationError("requestedForPlayerId must be one of this bout's two participants.");
+  }
+  await assertActorIsCoachOfPlayer(actorUserId, input.requestedForPlayerId);
+
+  const priorForPlayer = await prisma.videoReviewRequest.findMany({
+    where: { boutId, requestedForPlayerId: input.requestedForPlayerId },
+  });
+  if (priorForPlayer.some((r) => r.status === "REJECTED" || r.status === "UNVIEWABLE")) {
+    throw new ConflictError(
+      "This athlete's Coach has already lost the right to request video review for the remainder of this bout (Art. 14.12/14.14).",
+    );
+  }
+  if (priorForPlayer.some((r) => r.status === "REQUESTED")) {
+    throw new ConflictError("A video review request is already pending for this athlete.");
+  }
+
+  const created = await prisma.videoReviewRequest.create({
+    data: {
+      boutId,
+      requestedByUserId: actorUserId,
+      requestedForPlayerId: input.requestedForPlayerId,
+      requestedScoreType: input.requestedScoreType,
+      contestedEventId: findMostRecentActiveScoreEventId(bout),
+    },
+  });
+  await recordAudit(actorUserId, "VIDEO_REVIEW_REQUESTED", "Bout", boutId, {
+    requestId: created.id,
+    requestedForPlayerId: input.requestedForPlayerId,
+  });
+  return getKumiteState(boutId, actorUserId);
+}
+
+/**
+ * Art. 14.12-14.14 — the Video Review Judge's decision. An UPHELD decision
+ * writes an ordinary ScoreEvent through the normal Kumite ledger (Art. 14.13:
+ * the VRJ may not overrule the corner Judges except for SENSHU) — this is
+ * never a second result mechanism.
+ */
+export async function decideVideoReview(
+  boutId: string,
+  requestId: string,
+  actorUserId: string,
+  input: {
+    status: "UPHELD" | "REJECTED" | "UNVIEWABLE";
+    awardedScoreType?: "YUKO" | "WAZA_ARI" | "IPPON";
+    decisionNotes?: string;
+    clientOperationId: string;
+  },
+) {
+  const bout = await loadBoutForKumite(boutId);
+  assertBoutHasTwoParticipants(bout);
+  await resolveOfficialAssignment(bout, actorUserId, ["VIDEO_REVIEW_JUDGE"]);
+
+  const request = await prisma.videoReviewRequest.findUnique({ where: { id: requestId } });
+  if (!request || request.boutId !== boutId) {
+    throw new NotFoundError("Video review request", requestId);
+  }
+  if (request.status !== "REQUESTED") {
+    throw new ConflictError("This video review request has already been decided.");
+  }
+  if (input.status === "UPHELD" && !input.awardedScoreType) {
+    throw new ValidationError("awardedScoreType is required to uphold a video review request.");
+  }
+
+  let resultingEventId: string | undefined;
+  if (input.status === "UPHELD" && input.awardedScoreType) {
+    const config = await getConfig(bout.round.draw.competition.ruleSetVersionId);
+    try {
+      const event = await prisma.scoreEvent.create({
+        data: {
+          boutId,
+          discipline: "KUMITE",
+          eventType: input.awardedScoreType,
+          targetPlayerId: request.requestedForPlayerId,
+          points: pointsForScoreType(input.awardedScoreType, config),
+          clientOperationId: input.clientOperationId,
+          simultaneousWithEventId: request.contestedEventId,
+        },
+      });
+      resultingEventId = event.id;
+    } catch (error) {
+      if (!isUniqueConstraintError(error)) throw error;
+      const existing = await prisma.scoreEvent.findUnique({ where: { clientOperationId: input.clientOperationId } });
+      resultingEventId = existing?.id;
+    }
+  }
+
+  await prisma.videoReviewRequest.update({
+    where: { id: requestId },
+    data: {
+      status: input.status,
+      decidedByUserId: actorUserId,
+      decisionNotes: input.decisionNotes,
+      resultingEventId,
+      decidedAt: new Date(),
+    },
+  });
+  await recordAudit(actorUserId, "VIDEO_REVIEW_DECIDED", "Bout", boutId, { requestId, status: input.status });
+  return getKumiteState(boutId, actorUserId);
 }

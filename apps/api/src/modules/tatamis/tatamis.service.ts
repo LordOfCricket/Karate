@@ -8,6 +8,7 @@ import {
   getTournamentWithOrganizer,
 } from "../tournaments/tournaments.service";
 import { recordAudit } from "../../lib/audit";
+import { emitCompetitionEvent } from "../../lib/realtime";
 
 const TATAMI_SELECT = { id: true, tournamentId: true, label: true, status: true } as const;
 
@@ -61,6 +62,15 @@ export async function transitionTatamiStatus(
   await recordAudit(actorUserId, "TATAMI_STATUS_CHANGED", "Tatami", tatamiId, {
     from: tatami.status,
     to: nextStatus,
+  });
+  emitCompetitionEvent({
+    eventType: "TATAMI_STATUS_CHANGED",
+    entityType: "Tatami",
+    entityId: tatamiId,
+    tournamentId: tatami.tournamentId,
+    tatamiId,
+    payload: { status: nextStatus, previousStatus: tatami.status },
+    actorUserId,
   });
   return updated;
 }

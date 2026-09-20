@@ -44,6 +44,7 @@ model Academy {
   gradingEventsHosted GradingEvent[]
   academyStats        AcademyStats[]
   registrations       Registration[]
+  kataTeams           KataTeam[]
 
   @@index([status])
   @@index([name])

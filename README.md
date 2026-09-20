@@ -47,6 +47,8 @@ pnpm build            # builds every package + app that has a build script
 
 ## Documentation
 
+- [Production operations](docs/operations/production.md)
+
 - [System architecture](docs/architecture/01-system-architecture.md)
 - [Database architecture](docs/architecture/02-database-architecture.md) · [ERD](docs/database/erd.md)
 - [Role & permission model](docs/architecture/03-role-permission-model.md)

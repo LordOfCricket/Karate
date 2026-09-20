@@ -12,6 +12,20 @@ import {
 const app = buildTestApp();
 const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
 
+/** Creates a real RuleSetVersion + KumiteConfiguration and attaches it to the competition — used only by tests that need non-default config (videoReviewEnabled/twoJudgeMode). */
+async function withKumiteConfig(competitionId: string, overrides: { videoReviewEnabled?: boolean; twoJudgeMode?: boolean }) {
+  const ruleSet = await prisma.ruleSet.create({
+    data: { name: `WKF Kumite ${randomUUID()}`, discipline: "KUMITE", organizationName: "WKF" },
+  });
+  const version = await prisma.ruleSetVersion.create({
+    data: { ruleSetId: ruleSet.id, version: "2026.00", effectiveFrom: new Date("2026-01-01") },
+  });
+  await prisma.kumiteConfiguration.create({
+    data: { ruleSetVersionId: version.id, videoReviewEnabled: overrides.videoReviewEnabled ?? false, twoJudgeMode: overrides.twoJudgeMode ?? false },
+  });
+  await prisma.competition.update({ where: { id: competitionId }, data: { ruleSetVersionId: version.id } });
+}
+
 async function setup() {
   const owner = await registerAndLogin(app, "ACADEMY");
   const { academy, organizer } = await createAcademyWithOrganizer(owner.userId);
@@ -362,5 +376,206 @@ describe("Kumite competition engine (Phase 15)", () => {
     const res = await request(app).get(`/api/v1/bouts/${boutId}/kumite`).set(auth(p1.player.accessToken));
     expect(res.status).toBe(200);
     expect(res.body.data.state).toBeTruthy();
+  });
+
+  it("12. simultaneous scoring in the same referee decision grants SENSHU to neither athlete", async () => {
+    const { owner, competition, tournament } = await setup();
+    const { boutId, p1, p2, referee, judges } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+
+    const res = await request(app)
+      .post(`/api/v1/bouts/${boutId}/kumite/score`)
+      .set(auth(referee.scorer.accessToken))
+      .send({
+        signals: [
+          { officialAssignmentId: judges[0]!.assignmentId, targetPlayerId: p1.playerId, scoreType: "YUKO" },
+          { officialAssignmentId: judges[1]!.assignmentId, targetPlayerId: p1.playerId, scoreType: "YUKO" },
+          { officialAssignmentId: judges[2]!.assignmentId, targetPlayerId: p2.playerId, scoreType: "YUKO" },
+          { officialAssignmentId: judges[3]!.assignmentId, targetPlayerId: p2.playerId, scoreType: "YUKO" },
+        ],
+        clientOperationId: randomUUID(),
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.data.state.senshu).toBeNull();
+    expect(res.body.data.state.redScore).toBe(1);
+    expect(res.body.data.state.blueScore).toBe(1);
+  });
+
+  describe("Two-Judge Youth League mode (Appendix 5)", () => {
+    it("standard mode: the Referee's own signal does not count toward the 2-signal threshold", async () => {
+      const { owner, competition, tournament } = await setup();
+      await withKumiteConfig(competition.id, { twoJudgeMode: false });
+      const { boutId, p1, referee, judges } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+
+      const res = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/score`)
+        .set(auth(referee.scorer.accessToken))
+        .send({
+          signals: [
+            { officialAssignmentId: referee.assignmentId, targetPlayerId: p1.playerId, scoreType: "IPPON" },
+            { officialAssignmentId: judges[0]!.assignmentId, targetPlayerId: p1.playerId, scoreType: "IPPON" },
+          ],
+          clientOperationId: randomUUID(),
+        });
+      // Only 1 real Judge signal counts in standard mode -> below the 2-signal threshold.
+      expect(res.status).toBe(409);
+    });
+
+    it("two-judge mode: a Judge + the Referee's own signal together award the score (Appendix 5, point 3)", async () => {
+      const { owner, competition, tournament } = await setup();
+      await withKumiteConfig(competition.id, { twoJudgeMode: true });
+      const { boutId, p1, referee, judges } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+
+      const res = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/score`)
+        .set(auth(referee.scorer.accessToken))
+        .send({
+          signals: [
+            { officialAssignmentId: referee.assignmentId, targetPlayerId: p1.playerId, scoreType: "IPPON" },
+            { officialAssignmentId: judges[0]!.assignmentId, targetPlayerId: p1.playerId, scoreType: "IPPON" },
+          ],
+          clientOperationId: randomUUID(),
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.data.state.redScore).toBe(3);
+      expect(res.body.data.config.twoJudgeMode).toBe(true);
+    });
+  });
+
+  describe("Video Review (Art. 14)", () => {
+    async function affiliateCoachWithPlayer(academyId: string, playerId: string) {
+      const coach = await registerAndLogin(app, "COACH");
+      const profileRes = await request(app)
+        .post("/api/v1/coaches/profile")
+        .set(auth(coach.accessToken))
+        .send({ displayName: `Coach ${randomUUID()}` });
+      await prisma.academyCoachAffiliation.create({
+        data: { academyId, coachId: profileRes.body.data.id, status: "ACTIVE", startedAt: new Date() },
+      });
+      await prisma.academyPlayerMembership.create({
+        data: { academyId, playerId, status: "ACTIVE", startedAt: new Date() },
+      });
+      return coach;
+    }
+
+    it("6. an unauthorized coach (not this athlete's coach) cannot request video review", async () => {
+      const { owner, academy, competition, tournament } = await setup();
+      await withKumiteConfig(competition.id, { videoReviewEnabled: true });
+      const { boutId, p1 } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+      void academy;
+      const unrelatedCoach = await registerAndLogin(app, "COACH");
+      await request(app)
+        .post("/api/v1/coaches/profile")
+        .set(auth(unrelatedCoach.accessToken))
+        .send({ displayName: `Coach ${randomUUID()}` });
+
+      const res = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review`)
+        .set(auth(unrelatedCoach.accessToken))
+        .send({ requestedForPlayerId: p1.playerId, requestedScoreType: "IPPON" });
+      expect(res.status).toBe(403);
+    });
+
+    it("7/8/9. a valid request, a valid UPHELD decision, and preserved history", async () => {
+      const { owner, academy, competition, tournament } = await setup();
+      await withKumiteConfig(competition.id, { videoReviewEnabled: true });
+      const { boutId, p1, referee } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+      const coach = await affiliateCoachWithPlayer(academy.id, p1.playerId);
+      const { scorer: vrj, assignmentId: vrjAssignmentId } = await assignOfficial(owner, tournament.id, "VIDEO_REVIEW_JUDGE");
+
+      const requestRes = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review`)
+        .set(auth(coach.accessToken))
+        .send({ requestedForPlayerId: p1.playerId, requestedScoreType: "IPPON" });
+      expect(requestRes.status).toBe(201);
+      const requestId = requestRes.body.data.videoReviewRequests[0].id as string;
+
+      const decideRes = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review/${requestId}/decide`)
+        .set(auth(vrj.accessToken))
+        .send({ status: "UPHELD", awardedScoreType: "IPPON", clientOperationId: randomUUID() });
+      expect(decideRes.status).toBe(200);
+      expect(decideRes.body.data.state.redScore).toBe(3);
+      expect(decideRes.body.data.videoReviewRequests[0].status).toBe("UPHELD");
+      void vrjAssignmentId;
+
+      const state = await request(app).get(`/api/v1/bouts/${boutId}/kumite`).set(auth(coach.accessToken));
+      expect(state.body.data.videoReviewRequests).toHaveLength(1);
+    });
+
+    it("an UPHELD video review that confirms the opponent also scored strips the original SENSHU (Art. 12.2.9)", async () => {
+      const { owner, academy, competition, tournament } = await setup();
+      await withKumiteConfig(competition.id, { videoReviewEnabled: true });
+      const { boutId, p1, p2, referee, judges } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+      const coachForP2 = await affiliateCoachWithPlayer(academy.id, p2.playerId);
+      const { scorer: vrj } = await assignOfficial(owner, tournament.id, "VIDEO_REVIEW_JUDGE");
+
+      // RED (p1) scores first and unopposed -> holds SENSHU.
+      const scored = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/score`)
+        .set(auth(referee.scorer.accessToken))
+        .send({
+          signals: [
+            { officialAssignmentId: judges[0]!.assignmentId, targetPlayerId: p1.playerId, scoreType: "YUKO" },
+            { officialAssignmentId: judges[1]!.assignmentId, targetPlayerId: p1.playerId, scoreType: "YUKO" },
+          ],
+          clientOperationId: randomUUID(),
+        });
+      expect(scored.body.data.state.senshu).toBe("RED");
+
+      // p2's Coach requests a review claiming the judges missed p2's own score in that same exchange.
+      const requestRes = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review`)
+        .set(auth(coachForP2.accessToken))
+        .send({ requestedForPlayerId: p2.playerId, requestedScoreType: "YUKO" });
+      const requestId = requestRes.body.data.videoReviewRequests[0].id as string;
+
+      const decideRes = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review/${requestId}/decide`)
+        .set(auth(vrj.accessToken))
+        .send({ status: "UPHELD", awardedScoreType: "YUKO", clientOperationId: randomUUID() });
+
+      expect(decideRes.status).toBe(200);
+      expect(decideRes.body.data.state.redScore).toBe(1);
+      expect(decideRes.body.data.state.blueScore).toBe(1);
+      // Both scored in the same original exchange once corrected -> neither retains "first unopposed advantage".
+      expect(decideRes.body.data.state.senshu).toBeNull();
+    });
+
+    it("a REJECTED request strips the Coach's right to request again in this bout", async () => {
+      const { owner, academy, competition, tournament } = await setup();
+      await withKumiteConfig(competition.id, { videoReviewEnabled: true });
+      const { boutId, p1 } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+      const coach = await affiliateCoachWithPlayer(academy.id, p1.playerId);
+      const { scorer: vrj } = await assignOfficial(owner, tournament.id, "VIDEO_REVIEW_JUDGE");
+
+      const first = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review`)
+        .set(auth(coach.accessToken))
+        .send({ requestedForPlayerId: p1.playerId });
+      const requestId = first.body.data.videoReviewRequests[0].id as string;
+      await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review/${requestId}/decide`)
+        .set(auth(vrj.accessToken))
+        .send({ status: "REJECTED", clientOperationId: randomUUID() });
+
+      const second = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review`)
+        .set(auth(coach.accessToken))
+        .send({ requestedForPlayerId: p1.playerId });
+      expect(second.status).toBe(409);
+    });
+
+    it("video review is rejected outright when disabled for the competition", async () => {
+      const { owner, academy, competition, tournament } = await setup();
+      const { boutId, p1 } = await buildLiveKumiteBout(owner, competition.id, tournament.id);
+      const coach = await affiliateCoachWithPlayer(academy.id, p1.playerId);
+
+      const res = await request(app)
+        .post(`/api/v1/bouts/${boutId}/kumite/video-review`)
+        .set(auth(coach.accessToken))
+        .send({ requestedForPlayerId: p1.playerId });
+      expect(res.status).toBe(409);
+    });
   });
 });

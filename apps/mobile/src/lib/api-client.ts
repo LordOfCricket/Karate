@@ -291,6 +291,7 @@ export interface ScheduleEntryRow {
   id: string;
   boutId: string;
   competitionId: string;
+  discipline: string;
   roundNumber: number;
   roundName: string | null;
   redPlayerId: string | null;
@@ -314,6 +315,120 @@ export interface OfficialAssignmentRow {
   tournament?: { id: string; name: string; slug: string };
   tatami?: { id: string; label: string } | null;
 }
+
+export interface KumiteScoreState {
+  redScore: number;
+  blueScore: number;
+  redIppon: number;
+  redWazaAri: number;
+  redYuko: number;
+  blueIppon: number;
+  blueWazaAri: number;
+  blueYuko: number;
+  senshu: "RED" | "BLUE" | null;
+  redPenalties: string[];
+  bluePenalties: string[];
+  clearLeadReached: "RED" | "BLUE" | null;
+}
+export interface KumiteEventRow {
+  id: string;
+  eventType: string;
+  targetPlayerId: string | null;
+  points: number | null;
+  reversesEventId: string | null;
+  recordedAt: string;
+}
+export interface VideoReviewRequestRow {
+  id: string;
+  requestedForPlayerId: string;
+  requestedScoreType: string | null;
+  status: "REQUESTED" | "UPHELD" | "REJECTED" | "UNVIEWABLE";
+  decisionNotes: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+export interface KumiteLiveState {
+  boutId: string;
+  status: string;
+  redPlayerId: string | null;
+  bluePlayerId: string | null;
+  state: KumiteScoreState | null;
+  config: { twoJudgeMode: boolean; videoReviewEnabled: boolean };
+  myOfficialFunction: string | null;
+  panelOfficials: { id: string; function: string; displayName: string }[];
+  clock: { durationSeconds: number; elapsedSeconds: number; remainingSeconds: number; running: boolean };
+  events: KumiteEventRow[];
+  videoReviewRequests: VideoReviewRequestRow[];
+}
+export interface KataDefinitionRow {
+  id: string;
+  name: string;
+  styleNote: string | null;
+}
+export interface JudgeEvaluationRow {
+  id: string;
+  officialAssignmentId: string;
+  targetPlayerId: string | null;
+  targetTeamId: string | null;
+  phase: "KATA" | "BUNKAI";
+  score: number | null;
+  isDisqualification: boolean;
+  correctionOfId: string | null;
+  recordedAt: string;
+}
+export interface KataLiveState {
+  boutId: string;
+  status: string;
+  redPlayerId: string | null;
+  bluePlayerId: string | null;
+  redTeam: { id: string; name: string } | null;
+  blueTeam: { id: string; name: string } | null;
+  ruleSetVersionId: string | null;
+  config: { scoreMin: number; scoreMax: number; scoreIncrement: number };
+  myOfficialFunction: string | null;
+  myOfficialAssignmentId: string | null;
+  canManage: boolean;
+  panelOfficials: { id: string; displayName: string }[];
+  performance: { redKata: { id: string; name: string } | null; blueKata: { id: string; name: string } | null; bunkaiRequired: boolean };
+  evaluations: JudgeEvaluationRow[];
+  votes: { officialAssignmentId: string; votedForPlayerId: string | null }[];
+  redVotes: number;
+  blueVotes: number;
+}
+
+export interface BoutDetailRow {
+  id: string;
+  status: string;
+  redPlayer: { id: string; displayName: string } | null;
+  bluePlayer: { id: string; displayName: string } | null;
+  redTeam: { id: string; name: string } | null;
+  blueTeam: { id: string; name: string } | null;
+  tatami: { id: string; label: string } | null;
+  roundName: string | null;
+  roundNumber: number;
+}
+
+export interface PlayerResultRow {
+  boutId: string;
+  playerId: string;
+  discipline: "KUMITE" | "KATA";
+  opponent: { id: string; displayName: string } | null;
+  tournament: { id: string; name: string };
+  result: { winnerPlayerId: string | null; method: string; finalScoreRed: number | null; finalScoreBlue: number | null; decidedAt: string };
+  date: string | null;
+}
+
+export interface PlayerStatsSummary {
+  appearances: number; wins: number; losses: number; draws: number; winRate: number;
+  pointsScored: number; pointsConceded: number; tournamentsEntered: number; kumiteBouts: number; kataBouts: number;
+}
+
+export interface RankingCategoryRow { id: string; label: string; rankingSeason: { rankingSystem: { name: string; discipline: string }; season: { name: string } } }
+export interface RankingRow { rank: number; points: string; player: { id: string; displayName: string } }
+export interface NotificationRow { id: string; type: string; title: string; body: string | null; isRead: boolean; createdAt: string }
+
+/** Exposed so lib/realtime-client.ts can force a refresh before a reconnect attempt when the socket handshake itself is what discovers an expired access token (no concurrent HTTP call to trigger the usual 401 recovery path). */
+export const ensureFreshAccessToken = refreshOnce;
 
 /** Same backend contracts as web — no auth logic is reimplemented here, only transported. */
 export const apiClient = {
@@ -383,6 +498,12 @@ export const apiClient = {
     request<{ items: TournamentSummary[] }>("/api/v1/tournaments?status=REGISTRATION_OPEN&pageSize=50")
       .then((r) => r.items)
       .catch(() => []),
+  getMyResults: () => request<PlayerResultRow[]>("/api/v1/players/me/results", { withAuth: true }).catch(() => []),
+  getMyStats: () => requestOrNull<PlayerStatsSummary>("/api/v1/players/me/stats", { withAuth: true }),
+  getRankingCategories: () => request<RankingCategoryRow[]>("/api/v1/rankings/categories").catch(() => []),
+  getRanking: (categoryId: string) => request<RankingRow[]>(`/api/v1/rankings/${categoryId}`).catch(() => []),
+  getNotifications: () => request<NotificationRow[]>("/api/v1/notifications", { withAuth: true }).catch(() => []),
+  markNotificationRead: (id: string) => request(`/api/v1/notifications/${id}/read`, { method: "POST", withAuth: true }),
   getTournamentDetail: (tournamentId: string) =>
     requestOrNull<TournamentDetail>(`/api/v1/tournaments/${tournamentId}`),
   createRegistration: (competitionId: string) =>
@@ -442,4 +563,82 @@ export const apiClient = {
 
   getMyAssignments: () =>
     request<OfficialAssignmentRow[]>("/api/v1/scorers/me/assignments", { withAuth: true }).catch(() => []),
+
+  getBout: (boutId: string) => requestOrNull<BoutDetailRow>(`/api/v1/bouts/${boutId}`, { withAuth: true }),
+  getKumiteState: (boutId: string) =>
+    requestOrNull<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite`, { withAuth: true }),
+  submitKumiteScore: (
+    boutId: string,
+    input: { signals: { officialAssignmentId: string; targetPlayerId: string; scoreType: string }[]; clientOperationId: string },
+  ) => request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/score`, { method: "POST", body: input, withAuth: true }),
+  cancelKumiteScore: (boutId: string, input: { eventId: string; clientOperationId: string }) =>
+    request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/score/cancel`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
+  applyKumitePenalty: (
+    boutId: string,
+    input: { targetPlayerId: string; penaltyType: string; reasonCode: string; clientOperationId: string },
+  ) => request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/penalty`, { method: "POST", body: input, withAuth: true }),
+  submitHanteiVotes: (
+    boutId: string,
+    input: { votes: { officialAssignmentId: string; votedForPlayerId: string }[]; clientOperationId: string },
+  ) => request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/hantei`, { method: "POST", body: input, withAuth: true }),
+  finalizeKumiteResult: (
+    boutId: string,
+    input: { disqualifiedPlayerId?: string; disqualificationType?: string; allowDraw?: boolean },
+  ) =>
+    request<{ status: string; result: unknown }>(`/api/v1/bouts/${boutId}/kumite/finalize`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
+  startKumiteClock: (boutId: string) =>
+    request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/clock/start`, { method: "POST", withAuth: true }),
+  pauseKumiteClock: (boutId: string) =>
+    request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/clock/pause`, { method: "POST", withAuth: true }),
+  resumeKumiteClock: (boutId: string) =>
+    request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/clock/resume`, { method: "POST", withAuth: true }),
+  requestVideoReview: (boutId: string, input: { requestedForPlayerId: string; requestedScoreType?: string }) =>
+    request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/video-review`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
+  decideVideoReview: (
+    boutId: string,
+    requestId: string,
+    input: { status: string; awardedScoreType?: string; decisionNotes?: string; clientOperationId: string },
+  ) =>
+    request<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite/video-review/${requestId}/decide`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
+
+  getKataState: (boutId: string) => requestOrNull<KataLiveState>(`/api/v1/bouts/${boutId}/kata`, { withAuth: true }),
+  getKataDefinitions: (ruleSetVersionId: string) =>
+    request<KataDefinitionRow[]>(`/api/v1/kata-definitions?ruleSetVersionId=${ruleSetVersionId}`, { withAuth: true }).catch(() => []),
+  announceKata: (boutId: string, input: { performerPlayerId: string; kataDefinitionId: string }) =>
+    request<KataLiveState>(`/api/v1/bouts/${boutId}/kata/announce`, { method: "POST", body: input, withAuth: true }),
+  submitJudgeEvaluation: (
+    boutId: string,
+    input: { targetPlayerId: string; score?: number; isDisqualification?: boolean; phase?: "KATA" | "BUNKAI"; clientOperationId: string },
+  ) => request<KataLiveState>(`/api/v1/bouts/${boutId}/kata/evaluations`, { method: "POST", body: input, withAuth: true }),
+  correctJudgeEvaluation: (
+    boutId: string,
+    input: { evaluationId: string; score?: number; isDisqualification?: boolean; clientOperationId: string },
+  ) =>
+    request<KataLiveState>(`/api/v1/bouts/${boutId}/kata/evaluations/correct`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
+  finalizeKataResult: (boutId: string, input: { kikenAgainstPlayerId?: string }) =>
+    request<{ status: string; result: unknown }>(`/api/v1/bouts/${boutId}/kata/finalize`, {
+      method: "POST",
+      body: input,
+      withAuth: true,
+    }),
 };

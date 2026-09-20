@@ -7,6 +7,7 @@ import {
   getTournamentWithOrganizer,
 } from "../tournaments/tournaments.service";
 import { recordAudit } from "../../lib/audit";
+import { emitCompetitionEvent } from "../../lib/realtime";
 
 interface BlockedPeriodInput {
   startAt: Date;
@@ -35,7 +36,13 @@ const SCHEDULE_ENTRY_SELECT = {
       bluePlayerId: true,
       redPlayer: { select: { displayName: true } },
       bluePlayer: { select: { displayName: true } },
-      round: { select: { roundNumber: true, name: true, draw: { select: { competitionId: true } } } },
+      round: {
+        select: {
+          roundNumber: true,
+          name: true,
+          draw: { select: { competitionId: true, competition: { select: { discipline: true } } } },
+        },
+      },
     },
   },
   tatami: { select: { id: true, label: true } },
@@ -70,7 +77,11 @@ function toScheduleDto(schedule: {
       bluePlayerId: string | null;
       redPlayer: { displayName: string } | null;
       bluePlayer: { displayName: string } | null;
-      round: { roundNumber: number; name: string | null; draw: { competitionId: string } };
+      round: {
+        roundNumber: number;
+        name: string | null;
+        draw: { competitionId: string; competition: { discipline: string } };
+      };
     };
     tatami: { id: string; label: string } | null;
   }>;
@@ -89,6 +100,7 @@ function toScheduleDto(schedule: {
         id: e.id,
         boutId: e.boutId,
         competitionId: e.bout.round.draw.competitionId,
+        discipline: e.bout.round.draw.competition.discipline,
         roundNumber: e.bout.round.roundNumber,
         roundName: e.bout.round.name,
         redPlayerId: e.bout.redPlayerId,
@@ -215,7 +227,16 @@ export async function generateTournamentSchedule(
     where: { id: scheduleId },
     include: { entries: { select: SCHEDULE_ENTRY_SELECT } },
   });
-  return toScheduleDto(schedule!);
+  const dto = toScheduleDto(schedule!);
+  emitCompetitionEvent({
+    eventType: "SCHEDULE_CHANGED",
+    entityType: "Schedule",
+    entityId: scheduleId,
+    tournamentId,
+    payload: { schedule: dto },
+    actorUserId,
+  });
+  return dto;
 }
 
 export async function getScheduleForTournament(tournamentId: string, actorUserId: string | null) {
@@ -332,6 +353,7 @@ export async function listUpcomingBoutsForPlayers(playerIds: string[]) {
     id: e.id,
     boutId: e.boutId,
     competitionId: e.bout.round.draw.competitionId,
+    discipline: e.bout.round.draw.competition.discipline,
     roundNumber: e.bout.round.roundNumber,
     roundName: e.bout.round.name,
     redPlayerId: e.bout.redPlayerId,

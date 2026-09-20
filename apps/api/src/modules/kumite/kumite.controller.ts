@@ -5,6 +5,8 @@ import type {
   ApplyKumitePenaltyRequest,
   SubmitHanteiVotesRequest,
   FinalizeKumiteResultRequest,
+  RequestVideoReviewRequest,
+  DecideVideoReviewRequest,
 } from "@karate/validation";
 import { asyncHandler } from "../../errors/asyncHandler";
 import * as kumiteService from "./kumite.service";
@@ -20,7 +22,7 @@ function boutId(req: Request): string {
 }
 
 export const getKumiteStateHandler = asyncHandler(async (req: Request, res: Response) => {
-  respond(res, req, 200, await kumiteService.getKumiteState(boutId(req)));
+  respond(res, req, 200, await kumiteService.getKumiteState(boutId(req), req.user?.id ?? null));
 });
 
 export const submitKumiteScoreHandler = asyncHandler(async (req: Request, res: Response) => {
@@ -58,4 +60,15 @@ export const pauseKumiteClockHandler = asyncHandler(async (req: Request, res: Re
 
 export const resumeKumiteClockHandler = asyncHandler(async (req: Request, res: Response) => {
   respond(res, req, 200, await kumiteService.resumeKumiteClock(boutId(req), req.user!.id));
+});
+
+export const requestVideoReviewHandler = asyncHandler(async (req: Request, res: Response) => {
+  const input = req.body as RequestVideoReviewRequest;
+  respond(res, req, 201, await kumiteService.requestVideoReview(boutId(req), req.user!.id, input));
+});
+
+export const decideVideoReviewHandler = asyncHandler(async (req: Request, res: Response) => {
+  const { requestId } = req.params as unknown as { requestId: string };
+  const input = req.body as DecideVideoReviewRequest;
+  respond(res, req, 200, await kumiteService.decideVideoReview(boutId(req), requestId, req.user!.id, input));
 });

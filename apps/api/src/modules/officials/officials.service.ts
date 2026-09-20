@@ -7,6 +7,7 @@ import {
   getTournamentWithOrganizer,
 } from "../tournaments/tournaments.service";
 import { recordAudit } from "../../lib/audit";
+import { emitCompetitionEvent } from "../../lib/realtime";
 
 interface AssignOfficialInput {
   scorerProfileId: string;
@@ -128,6 +129,16 @@ export async function assignOfficial(
   await recordAudit(actorUserId, "OFFICIAL_ASSIGNED", "OfficialAssignment", created.id, {
     scorerProfileId: input.scorerProfileId,
     function: input.function,
+  });
+  emitCompetitionEvent({
+    eventType: "OFFICIAL_ASSIGNMENT_CHANGED",
+    entityType: "OfficialAssignment",
+    entityId: created.id,
+    tournamentId,
+    competitionId: input.competitionId,
+    tatamiId: input.tatamiId,
+    payload: { assignment: created },
+    actorUserId,
   });
   return created;
 }

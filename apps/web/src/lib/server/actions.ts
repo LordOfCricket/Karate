@@ -256,3 +256,88 @@ export async function transitionAssignmentStatusAction(
   if (result.success) revalidatePath(`/dashboard/academy/schedule/${tournamentId}`);
   return result;
 }
+
+// ---- Kumite (Phase 15) ----
+// No revalidatePath here: the live bout page is client-polled (see KumiteLivePanel), not
+// server-list-rendered, so results are returned directly to the caller instead.
+
+interface ActionDataResult<T> extends ActionResult {
+  data?: T;
+}
+
+async function postAuthedData<T>(path: string, body: unknown): Promise<ActionDataResult<T>> {
+  const accessToken = getAccessToken();
+  if (!accessToken) {
+    return { success: false, message: "Your session has expired. Please sign in again." };
+  }
+  const result = await callBackend<T>(path, { method: "POST", body, accessToken });
+  return result.body.success
+    ? { success: true, data: result.body.data }
+    : { success: false, message: result.body.error.message };
+}
+
+export async function submitKumiteScoreAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/score`, input);
+}
+export async function cancelKumiteScoreAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/score/cancel`, input);
+}
+export async function applyKumitePenaltyAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/penalty`, input);
+}
+export async function submitHanteiVotesAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/hantei`, input);
+}
+export async function finalizeKumiteResultAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/finalize`, input);
+}
+export async function startKumiteClockAction(boutId: string) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/clock/start`, {});
+}
+export async function pauseKumiteClockAction(boutId: string) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/clock/pause`, {});
+}
+export async function resumeKumiteClockAction(boutId: string) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/clock/resume`, {});
+}
+export async function requestVideoReviewAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/video-review`, input);
+}
+export async function decideVideoReviewAction(boutId: string, requestId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kumite/video-review/${requestId}/decide`, input);
+}
+
+// ---- Kata (Phase 16) ----
+
+export async function announceKataAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kata/announce`, input);
+}
+export async function submitJudgeEvaluationAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kata/evaluations`, input);
+}
+export async function correctJudgeEvaluationAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kata/evaluations/correct`, input);
+}
+export async function finalizeKataResultAction(boutId: string, input: unknown) {
+  return postAuthedData(`/api/v1/bouts/${boutId}/kata/finalize`, input);
+}
+
+export async function createKataTeamAction(input: unknown): Promise<ActionResult> {
+  const result = await postAuthed("/api/v1/kata-teams", input);
+  if (result.success) revalidatePath("/dashboard/academy");
+  return result;
+}
+export async function addKataTeamMemberAction(teamId: string, playerId: string): Promise<ActionResult> {
+  const result = await postAuthed(`/api/v1/kata-teams/${teamId}/members`, { playerId });
+  if (result.success) revalidatePath("/dashboard/academy");
+  return result;
+}
+export async function removeKataTeamMemberAction(teamId: string, playerId: string): Promise<ActionResult> {
+  const result = await postAuthed(`/api/v1/kata-teams/${teamId}/members/remove`, { playerId });
+  if (result.success) revalidatePath("/dashboard/academy");
+  return result;
+}
+export async function createTeamBoutAction(competitionId: string, input: unknown): Promise<ActionResult> {
+  const result = await postAuthed(`/api/v1/competitions/${competitionId}/kata/team-bouts`, input);
+  return result;
+}

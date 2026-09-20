@@ -11,7 +11,14 @@ healthRouter.get("/live", (_req, res) => {
 healthRouter.get(
   "/ready",
   asyncHandler(async (_req, res) => {
-    await prisma.$queryRaw`SELECT 1`;
-    res.status(200).json({ success: true, data: { status: "ready" } });
+    try {
+      await Promise.race([
+        prisma.$queryRaw`SELECT 1`,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("database readiness timeout")), 2_000)),
+      ]);
+      res.status(200).json({ success: true, data: { status: "ready" } });
+    } catch {
+      res.status(503).json({ success: false, error: { code: "NOT_READY", message: "Service is not ready." } });
+    }
   }),
 );

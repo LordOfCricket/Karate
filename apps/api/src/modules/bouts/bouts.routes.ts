@@ -3,6 +3,7 @@ import {
   boutIdParamsSchema,
   recordBoutResultSchema,
   cancelBoutSchema,
+  correctBoutResultSchema,
   pauseBoutSchema,
   academyIdParamsSchema,
 } from "@karate/validation";
@@ -22,6 +23,7 @@ import {
   getMyBoutsHandler,
   getMyStudentsBoutsHandler,
   getAcademyBoutsHandler,
+  correctBoutResultHandler,
 } from "./bouts.controller";
 
 /** Mounted at /api/v1/bouts in app.ts — extends the existing (Phase 12) boutsRouter with the full bout lifecycle. */
@@ -82,6 +84,15 @@ boutLifecycleRouter.post(
   requireRole("ACADEMY"),
   validate(boutIdParamsSchema, "params"),
   finalizeBoutHandler,
+);
+
+boutLifecycleRouter.post(
+  "/:boutId/result/correct",
+  authenticate,
+  requireRole("ACADEMY"),
+  validate(boutIdParamsSchema, "params"),
+  validate(correctBoutResultSchema),
+  correctBoutResultHandler,
 );
 
 boutLifecycleRouter.post(

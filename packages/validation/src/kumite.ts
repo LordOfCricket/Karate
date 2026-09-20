@@ -42,6 +42,25 @@ export const submitHanteiVotesSchema = z.object({
 });
 export type SubmitHanteiVotesRequest = z.infer<typeof submitHanteiVotesSchema>;
 
+export const requestVideoReviewSchema = z.object({
+  requestedForPlayerId: uuidSchema,
+  requestedScoreType: z.enum(KUMITE_SCORE_TYPES).optional(),
+});
+export type RequestVideoReviewRequest = z.infer<typeof requestVideoReviewSchema>;
+
+export const decideVideoReviewSchema = z.object({
+  status: z.enum(["UPHELD", "REJECTED", "UNVIEWABLE"]),
+  awardedScoreType: z.enum(KUMITE_SCORE_TYPES).optional(),
+  decisionNotes: z.string().trim().max(500).optional(),
+  clientOperationId: uuidSchema,
+});
+export type DecideVideoReviewRequest = z.infer<typeof decideVideoReviewSchema>;
+
+export const videoReviewIdParamsSchema = z.object({
+  boutId: uuidSchema,
+  requestId: uuidSchema,
+});
+
 export const finalizeKumiteResultSchema = z.object({
   disqualifiedPlayerId: uuidSchema.optional(),
   disqualificationType: z.enum(["HANSOKU", "SHIKKAKU", "KIKEN"]).optional(),

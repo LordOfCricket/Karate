@@ -1,7 +1,10 @@
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { EmptyState } from "@/components/ui/EmptyState";
 import type { ScheduleEntryRow } from "@/lib/server/domain";
+
+const LIVE_STATUSES = new Set(["IN_PROGRESS", "PAUSED", "CALLED", "READY"]);
 
 export function ScheduleList({
   title,
@@ -33,7 +36,17 @@ export function ScheduleList({
                   {e.tatami ? ` · ${e.tatami.label}` : ""}
                 </p>
               </div>
-              <Badge tone="info">{e.boutStatus}</Badge>
+              <div className="flex items-center gap-2">
+                <Badge tone="info">{e.boutStatus}</Badge>
+                {LIVE_STATUSES.has(e.boutStatus) && (
+                  <Link
+                    href={`/bout/${e.boutId}/${e.discipline === "KATA" ? "kata-live" : "live"}`}
+                    className="text-xs font-medium text-accent hover:underline"
+                  >
+                    Live →
+                  </Link>
+                )}
+              </div>
             </div>
           ))
         )}

@@ -25,10 +25,12 @@ function ev(
   id: string,
   eventType: string,
   targetPlayerId: string | null,
-  offsetMs: number,
+  sequence: number,
   reversesEventId: string | null = null,
+  batchId: string | null = null,
+  simultaneousWithEventId: string | null = null,
 ): RawKumiteEvent {
-  return { id, eventType, targetPlayerId, points: null, reversesEventId, recordedAt: new Date(offsetMs) };
+  return { id, eventType, targetPlayerId, points: null, reversesEventId, sequence, batchId, simultaneousWithEventId };
 }
 
 describe("Kumite scoring rules (Art. 8.6)", () => {
@@ -63,11 +65,34 @@ describe("Kumite scoring rules (Art. 8.6)", () => {
     expect(state.senshu).toBe("RED");
   });
 
-  it("SENSHU is not awarded when both athletes score before either scores unopposed", () => {
-    // Both score at the exact same instant (simultaneous exchange) — neither is "unopposed".
-    const events = [ev("1", "YUKO", RED, 0), ev("2", "YUKO", BLUE, 0)];
+  it("SENSHU is not awarded when both athletes score in the same simultaneous exchange (Art. 12.2.2)", () => {
+    // Both score as part of one referee decision (shared batchId) — neither is "unopposed".
+    const batch = "batch-1";
+    const events = [ev("1", "YUKO", RED, 0, null, batch), ev("2", "YUKO", BLUE, 1, null, batch)];
     const state = computeKumiteState(events, RED, BLUE, CONFIG);
-    expect(state.senshu).toBe("RED"); // engine processes in array order when timestamps tie; documented limitation, see report
+    expect(state.senshu).toBeNull();
+    expect(state.redScore).toBe(1);
+    expect(state.blueScore).toBe(1);
+  });
+
+  it("a later, non-simultaneous score can still earn SENSHU after an earlier no-senshu simultaneous batch", () => {
+    const batch = "batch-1";
+    const events = [
+      ev("1", "YUKO", RED, 0, null, batch),
+      ev("2", "YUKO", BLUE, 1, null, batch),
+      ev("3", "WAZA_ARI", RED, 2),
+    ];
+    // After the simultaneous batch, score is 1-1 (not 0-0), so event 3 does not grant SENSHU either — SENSHU is Art. 12.2.2's *first unopposed advantage from 0-0* only.
+    const state = computeKumiteState(events, RED, BLUE, CONFIG);
+    expect(state.senshu).toBeNull();
+  });
+
+  it("deterministic sequence ordering (not insertion order) governs replay", () => {
+    const events = [ev("2", "YUKO", BLUE, 5), ev("1", "IPPON", RED, 1)];
+    const state = computeKumiteState(events, RED, BLUE, CONFIG);
+    // RED's IPPON (sequence 1) is processed before BLUE's YUKO (sequence 5) regardless of array order.
+    expect(state.redIppon).toBe(1);
+    expect(state.senshu).toBe("RED");
   });
 
   it("a cancelled (reversed) score event does not count and does not grant SENSHU", () => {
@@ -312,5 +337,41 @@ describe("Winner calculation (Art. 7.7-7.9, 12.2)", () => {
     const d1 = computeWinner({ state: state1, redPlayerId: RED, bluePlayerId: BLUE, timeUp: true, allowDraw: false });
     const d2 = computeWinner({ state: state2, redPlayerId: RED, bluePlayerId: BLUE, timeUp: true, allowDraw: false });
     expect(d1).toEqual(d2);
+  });
+});
+
+describe("Video Review retroactive SENSHU correction (Art. 12.2.9)", () => {
+  it("a Video-Review-upheld score merged into the original exchange strips the opponent's SENSHU", () => {
+    // RED scores YUKO unopposed -> RED holds SENSHU. Later, a video review confirms BLUE also
+    // scored in that SAME original exchange (contestedEventId = event "1") -> merged via
+    // simultaneousWithEventId, so replay must treat them as simultaneous: neither had SENSHU.
+    const events = [
+      ev("1", "YUKO", RED, 0),
+      ev("2", "IPPON", RED, 5), // a later, unrelated score — should NOT retroactively gain SENSHU either.
+      ev("3", "YUKO", BLUE, 99, null, null, "1"), // the VR-upheld event, sequence is last but simultaneous with event "1".
+    ];
+    const state = computeKumiteState(events, RED, BLUE, CONFIG);
+    expect(state.senshu).toBeNull();
+    expect(state.redScore).toBe(4); // 1 (YUKO) + 3 (IPPON) — the correction does not change point totals.
+    expect(state.blueScore).toBe(1);
+  });
+
+  it("without a Video Review correction, the same event history keeps the original SENSHU award", () => {
+    const events = [ev("1", "YUKO", RED, 0), ev("2", "IPPON", RED, 5), ev("3", "YUKO", BLUE, 99)];
+    const state = computeKumiteState(events, RED, BLUE, CONFIG);
+    expect(state.senshu).toBe("RED");
+  });
+
+  it("a Video-Review-upheld score with no contested event (nothing preceded it) behaves as a normal solo score", () => {
+    const events = [ev("1", "YUKO", RED, 10, null, null, null)];
+    const state = computeKumiteState(events, RED, BLUE, CONFIG);
+    expect(state.senshu).toBe("RED");
+  });
+
+  it("the original contested event is never mutated — only the new event carries the relationship", () => {
+    const original: RawKumiteEvent = ev("1", "YUKO", RED, 0);
+    const beforeSnapshot = { ...original };
+    computeKumiteState([original, ev("2", "YUKO", BLUE, 99, null, null, "1")], RED, BLUE, CONFIG);
+    expect(original).toEqual(beforeSnapshot);
   });
 });

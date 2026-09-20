@@ -67,8 +67,11 @@ revocation list anyway, so the stateless benefit was never real for this use cas
 - Refresh-token revocation on password change / "log out all devices."
 - Email verification enforcement (the column exists; nothing currently requires it before login).
 - Distributed rate limiting (Redis-backed) — required before running more than one API instance.
-- CSRF protection (not yet relevant — Phase 1 has no cookie-based session; revisit if session cookies
-  are introduced instead of bearer tokens).
+- Explicit CSRF tokens. The Web app's browser-facing Route Handlers now do set httpOnly cookies
+  (Phase 6+), but `SameSite=lax` already blocks the cookie from being sent on cross-site POST/PUT/
+  DELETE, and every actual API mutation is called server-side via `callBackend` using a Bearer token
+  read from that cookie — the browser never sends the cookie to `apps/api` directly. Revisit only if
+  a cookie-authenticated endpoint is ever called directly from client-side JS across origins.
 - Dependency/SAST scanning in CI (no CI pipeline exists yet in Phase 1).
 - Field-level encryption at rest for sensitive columns.
 

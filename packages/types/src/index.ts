@@ -8,3 +8,4 @@ export * from "./registration";
 export * from "./draw";
 export * from "./scheduling";
 export * from "./kumite";
+export * from "./kata";

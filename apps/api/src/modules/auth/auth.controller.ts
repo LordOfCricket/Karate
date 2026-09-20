@@ -3,6 +3,7 @@ import type { ApiSuccessResponse } from "@karate/types";
 import { asyncHandler } from "../../errors/asyncHandler";
 import * as authService from "./auth.service";
 import * as refreshService from "./refresh.service";
+import { issueRealtimeToken } from "../../lib/realtime";
 
 export const registerHandler = asyncHandler(async (req: Request, res: Response) => {
   const result = await authService.register(req.body);
@@ -32,6 +33,11 @@ export const meHandler = asyncHandler(async (req: Request, res: Response) => {
     meta: { requestId: req.requestId, timestamp: new Date().toISOString() },
   };
   res.status(200).json(body);
+});
+
+export const realtimeTokenHandler = asyncHandler(async (req: Request, res: Response) => {
+  const result = { token: issueRealtimeToken(req.user!.id), expiresInSeconds: 60 };
+  res.status(200).json({ success: true, data: result, meta: { requestId: req.requestId, timestamp: new Date().toISOString() } });
 });
 
 export const refreshHandler = asyncHandler(async (req: Request, res: Response) => {

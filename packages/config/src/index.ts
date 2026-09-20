@@ -16,7 +16,7 @@ const serverEnvSchema = z.object({
   JWT_ACCESS_TTL_SECONDS: z.coerce.number().int().positive().default(900),
   JWT_REFRESH_TTL_SECONDS: z.coerce.number().int().positive().default(2_592_000),
   CORS_ALLOWED_ORIGINS: z.string().default(""),
-  LOG_LEVEL: z.string().optional(),
+  LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   SPORTSHUB_API_BASE_URL: z.string().url().optional(),
   SPORTSHUB_API_KEY: z.string().optional(),
 });
@@ -41,6 +41,9 @@ export function loadServerEnv(source: NodeJS.ProcessEnv = process.env): ServerEn
     throw new Error(`Invalid environment configuration:\n${issues}`);
   }
 
+  if (result.data.NODE_ENV === "production" && result.data.CORS_ALLOWED_ORIGINS.length === 0) {
+    throw new Error("Invalid environment configuration: CORS_ALLOWED_ORIGINS is required in production.");
+  }
   cachedEnv = result.data;
   return cachedEnv;
 }

@@ -44,6 +44,17 @@ import {
   academyBoutsRouter,
 } from "./modules/bouts/bouts.routes";
 import { kumiteRouter } from "./modules/kumite/kumite.routes";
+import {
+  kataRouter,
+  kataDefinitionsRouter,
+  kataStandingsRouter,
+  kataTeamsRouter,
+  kataTeamBoutsRouter,
+} from "./modules/kata/kata.routes";
+import { playerResultsRouter, tournamentStatsRouter, academyStatsRouter, coachStatsRouter, rankingsRouter } from "./modules/stats/stats.routes";
+import { notificationsRouter } from "./modules/notifications/notifications.routes";
+import { protestsRouter, incidentsRouter } from "./modules/platform/platform.routes";
+import { searchRouter } from "./modules/search/search.routes";
 
 export function createApp(env: ServerEnv, logger: Logger): Express {
   const app = express();
@@ -53,6 +64,7 @@ export function createApp(env: ServerEnv, logger: Logger): Express {
   app.use(cors({ origin: getCorsAllowedOrigins(env), credentials: true }));
   app.use(requestContext(logger));
   app.use(express.json({ limit: "1mb" }));
+  app.set("trust proxy", env.NODE_ENV === "production");
   app.use(requestLogger);
 
   app.use("/health", healthRouter);
@@ -83,12 +95,26 @@ export function createApp(env: ServerEnv, logger: Logger): Express {
   app.use("/api/v1/bouts", boutsRouter);
   app.use("/api/v1/bouts", boutLifecycleRouter);
   app.use("/api/v1/bouts/:boutId/kumite", kumiteRouter);
+  app.use("/api/v1/bouts/:boutId/kata", kataRouter);
+  app.use("/api/v1/kata-definitions", kataDefinitionsRouter);
+  app.use("/api/v1/draws/:drawId/kata-standings", kataStandingsRouter);
+  app.use("/api/v1/kata-teams", kataTeamsRouter);
+  app.use("/api/v1/competitions/:competitionId/kata/team-bouts", kataTeamBoutsRouter);
   app.use("/api/v1/tournaments/:tournamentId/officials", tournamentOfficialsRouter);
   app.use("/api/v1/official-assignments", officialAssignmentsRouter);
   app.use("/api/v1/scorers/me/assignments", scorerAssignmentsRouter);
   app.use("/api/v1/players/me/bouts", playerBoutsRouter);
   app.use("/api/v1/coaches/me/students-bouts", coachStudentsBoutsRouter);
   app.use("/api/v1/academies/:academyId/bouts", academyBoutsRouter);
+  app.use("/api/v1/players/me", playerResultsRouter);
+  app.use("/api/v1/coaches/me", coachStatsRouter);
+  app.use("/api/v1/tournaments/:tournamentId", tournamentStatsRouter);
+  app.use("/api/v1/academies/:academyId", academyStatsRouter);
+  app.use("/api/v1/rankings", rankingsRouter);
+  app.use("/api/v1/notifications", notificationsRouter);
+  app.use("/api/v1/protests", protestsRouter);
+  app.use("/api/v1/incidents", incidentsRouter);
+  app.use("/api/v1/search", searchRouter);
 
   app.use(notFoundHandler);
   app.use(errorHandler);

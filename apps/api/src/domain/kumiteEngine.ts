@@ -18,6 +18,10 @@ export interface KumiteConfig {
   clearLeadPoints: number;
   senshuEnabled: boolean;
   chuiLimit: number;
+  /** Appendix 5 — Youth League 2-corner-Judge panel where a Judge+Referee pair (not just 2 Judges) can award a score. */
+  twoJudgeMode: boolean;
+  /** Art. 14 — whether Video Review is enabled for this competition; if false, review requests are rejected outright. */
+  videoReviewEnabled: boolean;
 }
 
 export function pointsForScoreType(type: KumiteScoreType, config: KumiteConfig): number {
@@ -32,7 +36,12 @@ export interface RawKumiteEvent {
   targetPlayerId: string | null;
   points: number | null;
   reversesEventId: string | null;
-  recordedAt: Date;
+  /** DB-guaranteed monotonic order — authoritative for replay, never `recordedAt` (millisecond timestamps can tie). */
+  sequence: number;
+  /** Events sharing a non-null batchId were written from a single authoritative decision (e.g. both athletes scoring in the same exchange, Art. 12.1.2) and must be evaluated together, not in arbitrary sub-order. */
+  batchId: string | null;
+  /** Art. 12.2.9 — set only on a Video-Review-upheld score: merges this event into the referenced (already-recorded) event's exchange for replay, without ever mutating that original event. */
+  simultaneousWithEventId: string | null;
 }
 
 export interface KumiteState {
@@ -51,6 +60,35 @@ export interface KumiteState {
 }
 
 /** Art. 8.6 (scale), 12.1.2/12.1.3 (both/either athlete scoring), 12.2.1-2 (SENSHU), 7.7 (8-point clear lead). */
+/**
+ * Groups consecutive score events sharing a non-null `batchId` into a single
+ * simultaneous decision unit — every other event is its own singleton group.
+ * Order between groups follows `sequence` (DB-guaranteed, never a millisecond
+ * timestamp that can tie).
+ */
+function groupIntoBatches(sorted: RawKumiteEvent[]): RawKumiteEvent[][] {
+  const groups: RawKumiteEvent[][] = [];
+  const seenBatch = new Map<string, number>();
+  const groupIndexByEventId = new Map<string, number>();
+  for (const e of sorted) {
+    let idx: number;
+    if (e.simultaneousWithEventId && groupIndexByEventId.has(e.simultaneousWithEventId)) {
+      // A Video-Review-upheld score joins the exchange it corrects (Art. 12.2.9), without mutating that original event.
+      idx = groupIndexByEventId.get(e.simultaneousWithEventId)!;
+      groups[idx]!.push(e);
+    } else if (e.batchId && seenBatch.has(e.batchId)) {
+      idx = seenBatch.get(e.batchId)!;
+      groups[idx]!.push(e);
+    } else {
+      idx = groups.length;
+      groups.push([e]);
+      if (e.batchId) seenBatch.set(e.batchId, idx);
+    }
+    groupIndexByEventId.set(e.id, idx);
+  }
+  return groups;
+}
+
 export function computeKumiteState(
   events: RawKumiteEvent[],
   redPlayerId: string,
@@ -62,7 +100,10 @@ export function computeKumiteState(
   );
   const senshuAnnulled = events.some((e) => e.eventType === "SENSHU_ANNULLED");
 
-  const sorted = [...events].sort((a, b) => a.recordedAt.getTime() - b.recordedAt.getTime());
+  const sorted = [...events]
+    .filter((e) => !reversed.has(e.id))
+    .sort((a, b) => a.sequence - b.sequence);
+  const batches = groupIntoBatches(sorted);
 
   let redScore = 0;
   let blueScore = 0;
@@ -77,35 +118,43 @@ export function computeKumiteState(
   const redPenalties: KumitePenaltyType[] = [];
   const bluePenalties: KumitePenaltyType[] = [];
 
-  for (const e of sorted) {
-    if (reversed.has(e.id)) continue;
-    if (e.eventType.startsWith("PENALTY_")) {
-      const level = e.eventType.replace("PENALTY_", "") as KumitePenaltyType;
-      if (e.targetPlayerId === redPlayerId) redPenalties.push(level);
-      else if (e.targetPlayerId === bluePlayerId) bluePenalties.push(level);
-      continue;
-    }
-    if (e.eventType !== "YUKO" && e.eventType !== "WAZA_ARI" && e.eventType !== "IPPON") continue;
-
-    const isRed = e.targetPlayerId === redPlayerId;
-    const pts = e.points ?? pointsForScoreType(e.eventType, config);
+  for (const batch of batches) {
     const beforeRed = redScore;
     const beforeBlue = blueScore;
+    let batchHasRedScore = false;
+    let batchHasBlueScore = false;
 
-    if (isRed) {
-      redScore += pts;
-      if (e.eventType === "IPPON") redIppon++;
-      if (e.eventType === "WAZA_ARI") redWazaAri++;
-      if (e.eventType === "YUKO") redYuko++;
-    } else {
-      blueScore += pts;
-      if (e.eventType === "IPPON") blueIppon++;
-      if (e.eventType === "WAZA_ARI") blueWazaAri++;
-      if (e.eventType === "YUKO") blueYuko++;
+    for (const e of batch) {
+      if (e.eventType.startsWith("PENALTY_")) {
+        const level = e.eventType.replace("PENALTY_", "") as KumitePenaltyType;
+        if (e.targetPlayerId === redPlayerId) redPenalties.push(level);
+        else if (e.targetPlayerId === bluePlayerId) bluePenalties.push(level);
+        continue;
+      }
+      if (e.eventType !== "YUKO" && e.eventType !== "WAZA_ARI" && e.eventType !== "IPPON") continue;
+
+      const isRed = e.targetPlayerId === redPlayerId;
+      const pts = e.points ?? pointsForScoreType(e.eventType, config);
+      if (isRed) {
+        redScore += pts;
+        batchHasRedScore = true;
+        if (e.eventType === "IPPON") redIppon++;
+        if (e.eventType === "WAZA_ARI") redWazaAri++;
+        if (e.eventType === "YUKO") redYuko++;
+      } else {
+        blueScore += pts;
+        batchHasBlueScore = true;
+        if (e.eventType === "IPPON") blueIppon++;
+        if (e.eventType === "WAZA_ARI") blueWazaAri++;
+        if (e.eventType === "YUKO") blueYuko++;
+      }
     }
 
+    // Art. 12.2.2: if both Athletes score in the same exchange (batch), neither gets "first unopposed advantage".
     if (config.senshuEnabled && senshu === null && beforeRed === 0 && beforeBlue === 0) {
-      senshu = isRed ? "RED" : "BLUE";
+      if (batchHasRedScore && !batchHasBlueScore) senshu = "RED";
+      else if (batchHasBlueScore && !batchHasRedScore) senshu = "BLUE";
+      // both scored simultaneously at 0-0, or neither scored (pure penalty batch) -> no SENSHU from this batch, both retain eligibility for a later one.
     }
 
     if (clearLeadReached === null) {

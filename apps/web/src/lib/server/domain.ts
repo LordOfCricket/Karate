@@ -167,6 +167,51 @@ export interface BeltHistoryResponse {
 
 export const getMyBeltHistory = () => fetchOrNull<BeltHistoryResponse>("/api/v1/players/me/belt-history");
 
+export interface PlayerResultRow {
+  boutId: string;
+  playerId: string;
+  discipline: "KUMITE" | "KATA";
+  opponent: { id: string; displayName: string } | null;
+  side: "RED" | "BLUE";
+  tournament: { id: string; name: string };
+  result: { winnerPlayerId: string | null; method: string; finalScoreRed: number | null; finalScoreBlue: number | null; decidedAt: string };
+  date: string | null;
+}
+export interface CoachResultRow {
+  boutId: string;
+  discipline: "KUMITE" | "KATA";
+  redPlayer: { id: string; displayName: string } | null;
+  bluePlayer: { id: string; displayName: string } | null;
+  tournament: { id: string; name: string };
+  result: { winnerPlayerId: string | null; method: string };
+  date: string | null;
+}
+
+export interface PlayerStatsSummary {
+  appearances: number;
+  wins: number;
+  losses: number;
+  draws: number;
+  winRate: number;
+  pointsScored: number;
+  pointsConceded: number;
+  tournamentsEntered: number;
+  kumiteBouts: number;
+  kataBouts: number;
+  resultMethods: Record<string, number>;
+}
+
+export const getMyResults = () => fetchOrEmpty<PlayerResultRow>("/api/v1/players/me/results");
+export const getMyStats = () => fetchOrNull<PlayerStatsSummary>("/api/v1/players/me/stats");
+export const getCoachResults = () => fetchOrEmpty<CoachResultRow>("/api/v1/coaches/me/results");
+export const getAcademyStats = (academyId: string) => fetchOrNull<{ playerCount: number; tournamentsParticipated: number; wins: number; losses: number; medalsWon: number }>(`/api/v1/academies/${academyId}/stats`);
+export const getRankingCategories = () => fetchOrEmpty<{ id: string; label: string; rankingSeason: { rankingSystem: { name: string; discipline: string }; season: { name: string } } }>("/api/v1/rankings/categories");
+export const getRanking = (categoryId: string) => fetchOrEmpty<{ rank: number; points: string; player: { displayName: string } }>(`/api/v1/rankings/${categoryId}`);
+export const getTournamentResults = (tournamentId: string) => fetchOrEmpty<CoachResultRow>(`/api/v1/tournaments/${tournamentId}/results`);
+export interface NotificationRow { id: string; type: string; title: string; body: string | null; isRead: boolean; createdAt: string; }
+export const getNotifications = () => fetchOrEmpty<NotificationRow>("/api/v1/notifications");
+
+
 export interface StudentGrade {
   playerId: string;
   displayName: string;
@@ -372,6 +417,7 @@ export interface ScheduleEntryRow {
   id: string;
   boutId: string;
   competitionId: string;
+  discipline: string;
   roundNumber: number;
   roundName: string | null;
   redPlayerId: string | null;
@@ -435,3 +481,145 @@ export interface OfficialAssignmentRow {
 export const getMyAssignments = () => fetchOrEmpty<OfficialAssignmentRow>("/api/v1/scorers/me/assignments");
 export const getTournamentAssignments = (tournamentId: string) =>
   fetchOrEmpty<OfficialAssignmentRow>(`/api/v1/tournaments/${tournamentId}/officials`);
+
+// ---- Kumite live state (Phase 15) ----
+
+export interface KumiteScoreState {
+  redScore: number;
+  blueScore: number;
+  redIppon: number;
+  redWazaAri: number;
+  redYuko: number;
+  blueIppon: number;
+  blueWazaAri: number;
+  blueYuko: number;
+  senshu: "RED" | "BLUE" | null;
+  redPenalties: string[];
+  bluePenalties: string[];
+  clearLeadReached: "RED" | "BLUE" | null;
+}
+
+export interface KumiteEventRow {
+  id: string;
+  eventType: string;
+  targetPlayerId: string | null;
+  points: number | null;
+  reversesEventId: string | null;
+  recordedAt: string;
+}
+
+export interface VideoReviewRequestRow {
+  id: string;
+  requestedForPlayerId: string;
+  requestedScoreType: string | null;
+  status: "REQUESTED" | "UPHELD" | "REJECTED" | "UNVIEWABLE";
+  decisionNotes: string | null;
+  requestedAt: string;
+  decidedAt: string | null;
+}
+
+export interface KumiteLiveState {
+  boutId: string;
+  status: string;
+  redPlayerId: string | null;
+  bluePlayerId: string | null;
+  state: KumiteScoreState | null;
+  config: { twoJudgeMode: boolean; videoReviewEnabled: boolean };
+  myOfficialFunction: string | null;
+  panelOfficials: { id: string; function: string; displayName: string }[];
+  clock: { durationSeconds: number; elapsedSeconds: number; remainingSeconds: number; running: boolean };
+  events: KumiteEventRow[];
+  videoReviewRequests: VideoReviewRequestRow[];
+}
+
+export const getKumiteState = (boutId: string) => fetchOrNull<KumiteLiveState>(`/api/v1/bouts/${boutId}/kumite`);
+
+export interface BoutDetailRow {
+  id: string;
+  status: string;
+  redPlayer: { id: string; displayName: string } | null;
+  bluePlayer: { id: string; displayName: string } | null;
+  redTeam: { id: string; name: string } | null;
+  blueTeam: { id: string; name: string } | null;
+  tatami: { id: string; label: string } | null;
+  roundName: string | null;
+  roundNumber: number;
+}
+
+export const getBout = (boutId: string) => fetchOrNull<BoutDetailRow>(`/api/v1/bouts/${boutId}`);
+
+// ---- Kata live state (Phase 16) ----
+
+export interface KataDefinitionRow {
+  id: string;
+  name: string;
+  styleNote: string | null;
+}
+
+export interface JudgeEvaluationRow {
+  id: string;
+  officialAssignmentId: string;
+  targetPlayerId: string | null;
+  targetTeamId: string | null;
+  phase: "KATA" | "BUNKAI";
+  score: number | null;
+  isDisqualification: boolean;
+  correctionOfId: string | null;
+  recordedAt: string;
+}
+
+export interface KataLiveState {
+  boutId: string;
+  status: string;
+  redPlayerId: string | null;
+  bluePlayerId: string | null;
+  redTeam: { id: string; name: string } | null;
+  blueTeam: { id: string; name: string } | null;
+  ruleSetVersionId: string | null;
+  config: { scoreMin: number; scoreMax: number; scoreIncrement: number };
+  myOfficialFunction: string | null;
+  myOfficialAssignmentId: string | null;
+  canManage: boolean;
+  panelOfficials: { id: string; displayName: string }[];
+  performance: {
+    redKata: { id: string; name: string } | null;
+    blueKata: { id: string; name: string } | null;
+    bunkaiRequired: boolean;
+  };
+  evaluations: JudgeEvaluationRow[];
+  votes: { officialAssignmentId: string; votedForPlayerId: string | null }[];
+  redVotes: number;
+  blueVotes: number;
+}
+
+export const getKataState = (boutId: string) => fetchOrNull<KataLiveState>(`/api/v1/bouts/${boutId}/kata`);
+export const getKataDefinitions = (ruleSetVersionId: string) =>
+  fetchOrEmpty<KataDefinitionRow>(`/api/v1/kata-definitions?ruleSetVersionId=${ruleSetVersionId}`);
+
+// ---- Round-robin standings / Team Kata (Phase 16 closure) ----
+
+export interface StandingRow {
+  playerId: string;
+  playerName?: string;
+  victoryPoints: number;
+  wins: number;
+  totalVotesFor: number;
+  totalVotesAgainst: number;
+  rank: number;
+  tieUnresolved: boolean;
+}
+
+export const getRoundRobinStandings = (drawId: string) =>
+  fetchOrNull<{ drawId: string; standings: StandingRow[] }>(`/api/v1/draws/${drawId}/kata-standings`);
+
+export interface KataTeamRow {
+  id: string;
+  name: string;
+  status: string;
+  academyId: string;
+  competitionId: string;
+  members: { player: { id: string; displayName: string } }[];
+}
+
+export const getKataTeams = (competitionId: string) =>
+  fetchOrEmpty<KataTeamRow>(`/api/v1/kata-teams?competitionId=${competitionId}`);

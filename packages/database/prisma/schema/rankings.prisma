@@ -1,21 +1,17 @@
 // ============================================================================
 // RANKING DOMAIN
-// ----------------------------------------------------------------------------
-// `RankingPointsEvent` is an append-only ledger — the source of truth.
-// `RankingEntry` is a materialized "current standing" snapshot recomputable
-// from the ledger at any time, mirroring the stats domain's rebuildability
-// principle. Ranking rules are configurable per RankingSystem rather than
-// one permanent points formula.
 // ============================================================================
 
 model RankingSystem {
   id            String     @id @default(uuid()) @db.Uuid
-  name          String // e.g. "National Kumite Ranking"
+  name          String
   discipline    Discipline
   karateStyleId String?    @db.Uuid
   description   String?
+  strategyVersion Int      @default(1)
+  strategy      Json?
 
-  karateStyle KarateStyle?    @relation(fields: [karateStyleId], references: [id], onDelete: SetNull)
+  karateStyle KarateStyle?  @relation(fields: [karateStyleId], references: [id], onDelete: SetNull)
   seasons     RankingSeason[]
 
   @@map("ranking_systems")
@@ -35,7 +31,6 @@ model RankingSeason {
   @@map("ranking_seasons")
 }
 
-/// A ranked bucket within a ranking season, e.g. "Male -68kg U18".
 model RankingCategory {
   id              String @id @default(uuid()) @db.Uuid
   rankingSeasonId String @db.Uuid
@@ -44,12 +39,12 @@ model RankingCategory {
   rankingSeason RankingSeason        @relation(fields: [rankingSeasonId], references: [id], onDelete: Cascade)
   entries       RankingEntry[]
   pointsEvents  RankingPointsEvent[]
+  snapshots     RankingSnapshot[]
 
   @@unique([rankingSeasonId, label])
   @@map("ranking_categories")
 }
 
-/// Materialized current standing — safe to drop and rebuild from RankingPointsEvent.
 model RankingEntry {
   id                String   @id @default(uuid()) @db.Uuid
   rankingCategoryId String   @db.Uuid
@@ -65,7 +60,6 @@ model RankingEntry {
   @@map("ranking_entries")
 }
 
-/// Append-only ledger of every point award/adjustment. Source of truth for rankings.
 model RankingPointsEvent {
   id                 String   @id @default(uuid()) @db.Uuid
   rankingCategoryId  String   @db.Uuid
@@ -73,11 +67,27 @@ model RankingPointsEvent {
   points             Decimal  @db.Decimal(10, 2)
   reason             String
   sourceTournamentId String?  @db.Uuid
+  sourceResultId     String?  @db.Uuid
   occurredAt         DateTime @default(now())
 
   rankingCategory RankingCategory @relation(fields: [rankingCategoryId], references: [id], onDelete: Cascade)
   player          PlayerProfile   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@index([rankingCategoryId, playerId])
+  @@unique([rankingCategoryId, sourceResultId, playerId])
   @@map("ranking_points_events")
+}
+
+model RankingSnapshot {
+  id                String   @id @default(uuid()) @db.Uuid
+  rankingCategoryId String   @db.Uuid
+  version           Int
+  entries           Json
+  createdAt         DateTime @default(now())
+
+  rankingCategory RankingCategory @relation(fields: [rankingCategoryId], references: [id], onDelete: Cascade)
+
+  @@unique([rankingCategoryId, version])
+  @@index([rankingCategoryId, createdAt])
+  @@map("ranking_snapshots")
 }

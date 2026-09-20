@@ -43,6 +43,10 @@ export const finalizeBoutHandler = asyncHandler(async (req: Request, res: Respon
   respond(res, req, 200, await boutsService.finalizeBout(boutId(req), req.user!.id));
 });
 
+export const correctBoutResultHandler = asyncHandler(async (req: Request, res: Response) => {
+  respond(res, req, 200, await boutsService.correctFinalizedBoutResult(boutId(req), req.user!.id, req.body));
+});
+
 export const sendBoutToReviewHandler = asyncHandler(async (req: Request, res: Response) => {
   respond(res, req, 200, await boutsService.sendBoutToReview(boutId(req), req.user!.id));
 });

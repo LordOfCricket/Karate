@@ -18,6 +18,7 @@ export const ROLE_NAVIGATION: Record<UserRole, NavItem[]> = {
     { label: "Results", href: "/dashboard/player/results" },
     { label: "Belt & Certificates", href: "/dashboard/player/belt" },
     { label: "Stats & Ranking", href: "/dashboard/player/stats" },
+    { label: "Notifications", href: "/dashboard/player/notifications" },
   ],
   COACH: [
     { label: "Overview", href: "/dashboard/coach" },
@@ -25,6 +26,7 @@ export const ROLE_NAVIGATION: Record<UserRole, NavItem[]> = {
     { label: "Academies", href: "/dashboard/coach/academies" },
     { label: "Tournaments", href: "/dashboard/coach/tournaments" },
     { label: "Results", href: "/dashboard/coach/results" },
+    { label: "Notifications", href: "/dashboard/coach/notifications" },
   ],
   ACADEMY: [
     { label: "Overview", href: "/dashboard/academy" },
@@ -33,12 +35,14 @@ export const ROLE_NAVIGATION: Record<UserRole, NavItem[]> = {
     { label: "Memberships", href: "/dashboard/academy/memberships" },
     { label: "Tournaments", href: "/dashboard/academy/tournaments" },
     { label: "Stats", href: "/dashboard/academy/stats" },
+    { label: "Notifications", href: "/dashboard/academy/notifications" },
   ],
   SCORER: [
     { label: "Overview", href: "/dashboard/scorer" },
     { label: "My Assignments", href: "/dashboard/scorer/assignments" },
     { label: "Live Scoring", href: "/dashboard/scorer/live" },
     { label: "History", href: "/dashboard/scorer/history" },
+    { label: "Notifications", href: "/dashboard/scorer/notifications" },
   ],
 };
 

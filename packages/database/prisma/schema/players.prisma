@@ -36,6 +36,7 @@ model PlayerProfile {
   membershipRequests    AcademyMembershipRequest[] @relation("MembershipRequestPlayer")
   gradingParticipations GradingParticipant[]
   drawSeeds             DrawSeed[]
+  kataTeamMemberships   KataTeamMember[]
 
   @@index([userId])
   @@map("player_profiles")

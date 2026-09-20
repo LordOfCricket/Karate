@@ -148,6 +148,7 @@ model Competition {
   registrations       Registration[]
   draws               Draw[]
   officialAssignments OfficialAssignment[]
+  kataTeams           KataTeam[]
 
   @@index([tournamentId, discipline])
   @@map("competitions")

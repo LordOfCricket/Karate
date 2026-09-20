@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "expo-router";
-import { ActivityIndicator, ScrollView, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 import { Card } from "@/components/Card";
 import { Badge } from "@/components/Badge";
 import { EmptyState } from "@/components/EmptyState";
 import { useAuth } from "@/context/AuthContext";
 import { apiClient, type ScheduleEntryRow } from "@/lib/api-client";
 import { colors, spacing, typography } from "@/theme/tokens";
+
+const LIVE_STATUSES = new Set(["CALLED", "READY", "IN_PROGRESS", "PAUSED"]);
 
 /** One shared screen for player/coach/academy — which backend endpoint it calls depends on the signed-in user's role, so business logic is never duplicated per role here. */
 export default function MyScheduleScreen() {
@@ -74,7 +76,14 @@ export default function MyScheduleScreen() {
                   {e.tatami ? ` · ${e.tatami.label}` : ""}
                 </Text>
               </View>
-              <Badge label={e.boutStatus} tone="info" />
+              <View style={{ alignItems: "flex-end", gap: spacing.xs }}>
+                <Badge label={e.boutStatus} tone="info" />
+                {LIVE_STATUSES.has(e.boutStatus) && (
+                  <Pressable onPress={() => router.push(e.discipline === "KATA" ? `/kata/${e.boutId}` : `/kumite/${e.boutId}`)}>
+                    <Text style={styles.liveLink}>Live →</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           ))
         )}
@@ -98,4 +107,5 @@ const styles = StyleSheet.create({
   },
   rowTitle: { ...typography.body, fontWeight: "600", color: colors.textPrimary },
   rowMeta: { fontSize: 12, color: colors.textMuted },
+  liveLink: { fontSize: 12, fontWeight: "600", color: colors.accent },
 });

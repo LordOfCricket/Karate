@@ -7,6 +7,8 @@ import {
   getTournamentWithOrganizer,
 } from "../tournaments/tournaments.service";
 import { recordAudit } from "../../lib/audit";
+import { emitCompetitionEvent } from "../../lib/realtime";
+import { processFinalizedResult } from "../stats/stats.service";
 
 const BOUT_DETAIL_INCLUDE = {
   round: {
@@ -18,6 +20,8 @@ const BOUT_DETAIL_INCLUDE = {
   },
   redPlayer: { select: { id: true, displayName: true } },
   bluePlayer: { select: { id: true, displayName: true } },
+  redTeam: { select: { id: true, name: true } },
+  blueTeam: { select: { id: true, name: true } },
   result: true,
   boutSchedules: {
     where: { schedule: { isActive: true } },
@@ -57,7 +61,11 @@ function toBoutDto(bout: Awaited<ReturnType<typeof loadBoutOrThrow>>) {
     status: bout.status,
     redPlayer: bout.redPlayer,
     bluePlayer: bout.bluePlayer,
-    isBye: bout.redPlayerId === null || bout.bluePlayerId === null,
+    redTeam: bout.redTeam,
+    blueTeam: bout.blueTeam,
+    isBye:
+      (bout.redPlayerId === null && bout.redTeamId === null) ||
+      (bout.bluePlayerId === null && bout.blueTeamId === null),
     startedAt: bout.startedAt,
     endedAt: bout.endedAt,
     cancelReason: bout.cancelReason,
@@ -69,6 +77,7 @@ function toBoutDto(bout: Awaited<ReturnType<typeof loadBoutOrThrow>>) {
           method: bout.result.method,
           reason: bout.result.reason,
           winnerPlayerId: bout.result.winnerPlayerId,
+          winnerTeamId: bout.result.winnerTeamId,
           finalScoreRed: bout.result.finalScoreRed,
           finalScoreBlue: bout.result.finalScoreBlue,
           isFinal: bout.result.isFinal,
@@ -121,7 +130,17 @@ export async function callBout(boutId: string, actorUserId: string) {
 
   await prisma.bout.update({ where: { id: boutId }, data: { status: "CALLED" } });
   await recordAudit(actorUserId, "BOUT_CALLED", "Bout", boutId);
-  return toBoutDto(await loadBoutOrThrow(boutId));
+  const updatedBout = await loadBoutOrThrow(boutId);
+  emitCompetitionEvent({
+    eventType: "BOUT_CALLED",
+    entityType: "Bout",
+    entityId: boutId,
+    tournamentId: tournamentIdOf(updatedBout),
+    competitionId: updatedBout.round.draw.competitionId,
+    payload: { bout: toBoutDto(updatedBout) },
+    actorUserId,
+  });
+  return toBoutDto(updatedBout);
 }
 
 export async function markBoutReady(boutId: string, actorUserId: string) {
@@ -158,6 +177,8 @@ export async function resumeBout(boutId: string, actorUserId: string) {
 interface RecordResultInput {
   method: BoutResultMethodValue;
   winnerPlayerId?: string;
+  /** Team Kata (Art. 3.5) — set instead of winnerPlayerId when the bout's sides are KataTeams. */
+  winnerTeamId?: string;
   finalScoreRed?: number;
   finalScoreBlue?: number;
   reason?: string;
@@ -181,6 +202,9 @@ export async function applyBoutResult(boutId: string, input: RecordResultInput) 
   ) {
     throw new ValidationError("winnerPlayerId must be one of this bout's two participants.");
   }
+  if (input.winnerTeamId && input.winnerTeamId !== bout.redTeamId && input.winnerTeamId !== bout.blueTeamId) {
+    throw new ValidationError("winnerTeamId must be one of this bout's two Teams.");
+  }
 
   await prisma.$transaction(async (tx) => {
     await tx.bout.update({ where: { id: boutId }, data: { status: "FINISHED", endedAt: new Date() } });
@@ -190,6 +214,7 @@ export async function applyBoutResult(boutId: string, input: RecordResultInput) 
         boutId,
         method: input.method,
         winnerPlayerId: input.winnerPlayerId,
+        winnerTeamId: input.winnerTeamId,
         finalScoreRed: input.finalScoreRed,
         finalScoreBlue: input.finalScoreBlue,
         reason: input.reason,
@@ -197,6 +222,7 @@ export async function applyBoutResult(boutId: string, input: RecordResultInput) 
       update: {
         method: input.method,
         winnerPlayerId: input.winnerPlayerId,
+        winnerTeamId: input.winnerTeamId,
         finalScoreRed: input.finalScoreRed,
         finalScoreBlue: input.finalScoreBlue,
         reason: input.reason,
@@ -233,7 +259,27 @@ export async function finalizeBout(boutId: string, actorUserId: string) {
     });
   });
   await recordAudit(actorUserId, "BOUT_FINALIZED", "Bout", boutId);
+  await processFinalizedResult(boutId, actorUserId);
   return toBoutDto(await loadBoutOrThrow(boutId));
+}
+
+export async function correctFinalizedBoutResult(boutId: string, actorUserId: string, input: {
+  winnerPlayerId?: string | null; winnerTeamId?: string | null; method?: BoutResultMethodValue;
+  finalScoreRed?: number | null; finalScoreBlue?: number | null; reason?: string; correctionReason: string;
+}) {
+  const bout = await loadBoutOrThrow(boutId);
+  await assertCanManageBout(bout, actorUserId);
+  if (!bout.result?.isFinal || !bout.result.id) throw new ConflictError("Only finalized results can be corrected.");
+  const previous = { winnerPlayerId: bout.result.winnerPlayerId, winnerTeamId: bout.result.winnerTeamId, method: bout.result.method, finalScoreRed: bout.result.finalScoreRed, finalScoreBlue: bout.result.finalScoreBlue, reason: bout.result.reason };
+  if (input.winnerPlayerId && input.winnerPlayerId !== bout.redPlayerId && input.winnerPlayerId !== bout.bluePlayerId) throw new ValidationError("Corrected winner must be a bout participant.");
+  if (input.winnerTeamId && input.winnerTeamId !== bout.redTeamId && input.winnerTeamId !== bout.blueTeamId) throw new ValidationError("Corrected winner team must be a bout participant.");
+  const corrected = { ...previous, ...Object.fromEntries(Object.entries(input).filter(([key]) => key !== "correctionReason" && input[key as keyof typeof input] !== undefined)) };
+  await prisma.$transaction(async (tx) => {
+    await tx.boutResultCorrection.create({ data: { boutResultId: bout.result!.id, correctedByUserId: actorUserId, reason: input.correctionReason, previousValue: previous, correctedValue: corrected } });
+    await tx.boutResult.update({ where: { id: bout.result!.id }, data: corrected });
+  });
+  await recordAudit(actorUserId, "BOUT_RESULT_CORRECTED", "BoutResult", bout.result.id, { reason: input.correctionReason, previous, corrected });
+  return processFinalizedResult(boutId, actorUserId);
 }
 
 export async function sendBoutToReview(boutId: string, actorUserId: string) {

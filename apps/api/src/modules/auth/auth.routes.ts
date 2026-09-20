@@ -8,11 +8,17 @@ import {
 import { validate } from "../../middleware/validate";
 import { rateLimit } from "../../middleware/rateLimit";
 import { authenticate } from "../../middleware/auth";
-import { loginHandler, registerHandler, meHandler, refreshHandler, logoutHandler } from "./auth.controller";
+import { loginHandler, registerHandler, meHandler, refreshHandler, logoutHandler, realtimeTokenHandler } from "./auth.controller";
 
 export const authRouter = Router();
 
-authRouter.post("/register", validate(registerRequestSchema), registerHandler);
+authRouter.post(
+  "/register",
+  // Bounds mass account creation / email-enumeration probing — same posture as login.
+  rateLimit({ windowMs: 60_000, maxRequests: 10 }),
+  validate(registerRequestSchema),
+  registerHandler,
+);
 authRouter.post(
   "/login",
   rateLimit({ windowMs: 60_000, maxRequests: 10 }),
@@ -20,6 +26,7 @@ authRouter.post(
   loginHandler,
 );
 authRouter.get("/me", authenticate, meHandler);
+authRouter.get("/realtime-token", authenticate, realtimeTokenHandler);
 authRouter.post(
   "/refresh",
   // Higher ceiling than login: legitimate clients refresh periodically in

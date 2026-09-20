@@ -72,6 +72,7 @@ model OfficialAssignment {
   tatami        Tatami?       @relation(fields: [tatamiId], references: [id], onDelete: SetNull)
   scorerProfile ScorerProfile @relation(fields: [scorerProfileId], references: [id], onDelete: Cascade)
   scoreEvents   ScoreEvent[]
+  judgeEvaluations JudgeEvaluation[]
 
   @@index([tournamentId, function])
   @@index([scorerProfileId])
